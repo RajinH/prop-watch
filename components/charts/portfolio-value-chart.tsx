@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -32,7 +26,9 @@ interface PortfolioValueChartInnerProps {
   data: PortfolioHistory[];
 }
 
-export function PortfolioValueChartInner({ data }: PortfolioValueChartInnerProps) {
+export function PortfolioValueChartInner({
+  data,
+}: PortfolioValueChartInnerProps) {
   return (
     <ChartContainer
       config={portfolioChartConfig}

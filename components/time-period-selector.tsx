@@ -24,7 +24,7 @@ export function TimePeriodSelector({
           size="sm"
           onClick={() => onChange(period)}
           className={cn(
-            "h-8 px-3 text-sm",
+            "h-8 px-3 text-sm cursor-pointer",
             value === period
               ? "bg-background text-foreground shadow-sm hover:bg-background"
               : "hover:bg-transparent hover:text-foreground"

@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -26,7 +20,9 @@ interface LvrDistributionChartInnerProps {
   properties: Property[];
 }
 
-export function LvrDistributionChartInner({ properties }: LvrDistributionChartInnerProps) {
+export function LvrDistributionChartInner({
+  properties,
+}: LvrDistributionChartInnerProps) {
   const data = properties.map((p) => ({
     name: p.name.split(" ")[0],
     lvr: p.lvr,

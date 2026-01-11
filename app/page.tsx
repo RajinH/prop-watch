@@ -5,6 +5,8 @@ import { Building2, Wallet, TrendingUp, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PropertyCard } from "@/components/property-card";
 import { TimePeriodSelector } from "@/components/time-period-selector";
+import { AddPropertyCard } from "@/components/add-property-card";
+import { AddPropertyModal } from "@/components/add-property-modal";
 import {
   PortfolioValueChart,
   CashFlowChart,
@@ -48,11 +50,12 @@ function SummaryCard({
 
 export default function Home() {
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("monthly");
+  const [modalOpen, setModalOpen] = useState(false);
   const summary = calculatePortfolioSummary(properties);
 
   return (
     <main className="flex-1">
-      <div className="container py-6 px-4 md:px-6 space-y-8">
+      <div className="container mx-auto py-6 px-4 md:px-6 space-y-8">
         {/* Page Header */}
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -114,9 +117,13 @@ export default function Home() {
                 timePeriod={timePeriod}
               />
             ))}
+            <AddPropertyCard onClick={() => setModalOpen(true)} />
           </div>
         </div>
       </div>
+
+      {/* Add Property Modal */}
+      <AddPropertyModal open={modalOpen} onOpenChange={setModalOpen} />
     </main>
   );
 }

@@ -25,17 +25,24 @@ function ChartSkeleton() {
 
 // Dynamic imports with SSR disabled to prevent hydration issues with recharts
 const PortfolioValueChartInner = dynamic(
-  () => import("./charts/portfolio-value-chart").then((mod) => mod.PortfolioValueChartInner),
+  () =>
+    import("./charts/portfolio-value-chart").then(
+      (mod) => mod.PortfolioValueChartInner
+    ),
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
 const CashFlowChartInner = dynamic(
-  () => import("./charts/cash-flow-chart").then((mod) => mod.CashFlowChartInner),
+  () =>
+    import("./charts/cash-flow-chart").then((mod) => mod.CashFlowChartInner),
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
 const LvrDistributionChartInner = dynamic(
-  () => import("./charts/lvr-distribution-chart").then((mod) => mod.LvrDistributionChartInner),
+  () =>
+    import("./charts/lvr-distribution-chart").then(
+      (mod) => mod.LvrDistributionChartInner
+    ),
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
@@ -81,7 +88,9 @@ interface LvrDistributionChartProps {
   properties: Property[];
 }
 
-export function LvrDistributionChart({ properties }: LvrDistributionChartProps) {
+export function LvrDistributionChart({
+  properties,
+}: LvrDistributionChartProps) {
   return (
     <Card>
       <CardHeader>
