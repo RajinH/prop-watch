@@ -54,13 +54,12 @@ export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   // Lazy initialization from localStorage
   const [properties, setProperties] = useState<Property[]>([]);
-  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setProperties(getProperties());
-    setHydrated(true);
+    Promise.resolve().then(() => {
+      setProperties(getProperties());
+    });
   }, []);
-
   const handleDelete = useCallback((id: string) => {
     const updated = deleteProperty(id);
     setProperties(updated);
@@ -71,7 +70,8 @@ export default function Home() {
     setProperties(updated);
   }, []);
 
-  const summary = calculatePortfolioSummary(properties);
+  const hasData = properties.length > 0;
+  const summary = hasData ? calculatePortfolioSummary(properties) : null;
 
   return (
     <main className="flex-1">
@@ -85,32 +85,34 @@ export default function Home() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard
-            title="Total Portfolio Value"
-            value={formatCurrency(summary.totalValue)}
-            description={`${properties.length} properties`}
-            icon={Building2}
-          />
-          <SummaryCard
-            title="Total Debt"
-            value={formatCurrency(summary.totalDebt)}
-            description={`Equity: ${formatCurrency(summary.totalEquity)}`}
-            icon={Wallet}
-          />
-          <SummaryCard
-            title="Average LVR"
-            value={`${summary.avgLvr.toFixed(1)}%`}
-            description="Loan-to-Value Ratio"
-            icon={TrendingUp}
-          />
-          <SummaryCard
-            title="Net Cash Flow"
-            value={formatCurrency(summary.netCashFlow)}
-            description="Monthly net income"
-            icon={DollarSign}
-          />
-        </div>
+        {summary && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <SummaryCard
+              title="Total Portfolio Value"
+              value={formatCurrency(summary.totalValue)}
+              description={`${properties.length} properties`}
+              icon={Building2}
+            />
+            <SummaryCard
+              title="Total Debt"
+              value={formatCurrency(summary.totalDebt)}
+              description={`Equity: ${formatCurrency(summary.totalEquity)}`}
+              icon={Wallet}
+            />
+            <SummaryCard
+              title="Average LVR"
+              value={`${summary.avgLvr.toFixed(1)}%`}
+              description="Loan-to-Value Ratio"
+              icon={TrendingUp}
+            />
+            <SummaryCard
+              title="Net Cash Flow"
+              value={formatCurrency(summary.netCashFlow)}
+              description="Monthly net income"
+              icon={DollarSign}
+            />
+          </div>
+        )}
 
         {/* Charts Section */}
         <div className="grid gap-4 md:grid-cols-2">
