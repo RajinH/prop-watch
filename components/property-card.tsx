@@ -8,10 +8,18 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { type Property, formatCurrency } from "@/lib/data";
+import {
+  type Property,
+  type TimePeriod,
+  formatCurrency,
+  getValueForPeriod,
+  getPeriodLabel,
+  getPeriodDisplayName,
+} from "@/lib/data";
 
 interface PropertyCardProps {
   property: Property;
+  timePeriod?: TimePeriod;
 }
 
 function getLvrBadgeVariant(
@@ -45,9 +53,16 @@ function MetricRow({
   );
 }
 
-export function PropertyCard({ property }: PropertyCardProps) {
-  const cashFlow = property.income - property.expenses;
+export function PropertyCard({
+  property,
+  timePeriod = "monthly",
+}: PropertyCardProps) {
+  const income = getValueForPeriod(property.income, timePeriod);
+  const expenses = getValueForPeriod(property.expenses, timePeriod);
+  const cashFlow = income - expenses;
   const isPositiveCashFlow = cashFlow >= 0;
+  const periodLabel = getPeriodLabel(timePeriod);
+  const periodDisplayName = getPeriodDisplayName(timePeriod);
 
   return (
     <Card className="h-full">
@@ -80,12 +95,12 @@ export function PropertyCard({ property }: PropertyCardProps) {
 
         <div className="space-y-2">
           <MetricRow
-            label="Monthly Income"
-            value={formatCurrency(property.income)}
+            label={`${periodDisplayName} Income`}
+            value={formatCurrency(income)}
           />
           <MetricRow
-            label="Monthly Expenses"
-            value={formatCurrency(property.expenses)}
+            label={`${periodDisplayName} Expenses`}
+            value={formatCurrency(expenses)}
           />
         </div>
 
@@ -104,7 +119,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
               <TrendingDown className="h-4 w-4" />
             )}
             {formatCurrency(Math.abs(cashFlow))}
-            <span className="text-xs text-muted-foreground">/mo</span>
+            <span className="text-xs text-muted-foreground">{periodLabel}</span>
           </div>
         </div>
       </CardContent>

@@ -1,6 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import { Building2, Wallet, TrendingUp, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PropertyCard } from "@/components/property-card";
+import { TimePeriodSelector } from "@/components/time-period-selector";
 import {
   PortfolioValueChart,
   CashFlowChart,
@@ -12,6 +16,7 @@ import {
   cashFlowData,
   calculatePortfolioSummary,
   formatCurrency,
+  type TimePeriod,
 } from "@/lib/data";
 
 function SummaryCard({
@@ -42,6 +47,7 @@ function SummaryCard({
 }
 
 export default function Home() {
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("monthly");
   const summary = calculatePortfolioSummary(properties);
 
   return (
@@ -96,10 +102,17 @@ export default function Home() {
 
         {/* Properties Section */}
         <div>
-          <h2 className="text-2xl font-bold tracking-tight mb-4">Properties</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <h2 className="text-2xl font-bold tracking-tight">Properties</h2>
+            <TimePeriodSelector value={timePeriod} onChange={setTimePeriod} />
+          </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {properties.map((property) => (
-              <PropertyCard key={property.id} property={property} />
+              <PropertyCard
+                key={property.id}
+                property={property}
+                timePeriod={timePeriod}
+              />
             ))}
           </div>
         </div>

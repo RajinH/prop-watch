@@ -1,3 +1,5 @@
+export type TimePeriod = "weekly" | "monthly" | "yearly" | "lifetime";
+
 export interface Property {
   id: string;
   name: string;
@@ -120,4 +122,47 @@ export function calculatePortfolioSummary(properties: Property[]) {
     totalExpenses,
     netCashFlow,
   };
+}
+
+// Time period helpers
+export function getValueForPeriod(
+  monthlyValue: number,
+  period: TimePeriod
+): number {
+  switch (period) {
+    case "weekly":
+      return monthlyValue / 4.33; // avg weeks per month
+    case "monthly":
+      return monthlyValue;
+    case "yearly":
+      return monthlyValue * 12;
+    case "lifetime":
+      return monthlyValue * 12 * 30; // 30-year assumption
+  }
+}
+
+export function getPeriodLabel(period: TimePeriod): string {
+  switch (period) {
+    case "weekly":
+      return "/wk";
+    case "monthly":
+      return "/mo";
+    case "yearly":
+      return "/yr";
+    case "lifetime":
+      return " total";
+  }
+}
+
+export function getPeriodDisplayName(period: TimePeriod): string {
+  switch (period) {
+    case "weekly":
+      return "Weekly";
+    case "monthly":
+      return "Monthly";
+    case "yearly":
+      return "Yearly";
+    case "lifetime":
+      return "Lifetime";
+  }
 }
