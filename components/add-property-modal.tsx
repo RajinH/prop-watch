@@ -12,15 +12,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { type Property } from "@/lib/data";
 
 interface AddPropertyModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAdd?: (property: Omit<Property, "id" | "lvr">) => void;
 }
 
 export function AddPropertyModal({
   open,
   onOpenChange,
+  onAdd,
 }: AddPropertyModalProps) {
   const [formData, setFormData] = useState({
     name: "",
@@ -38,9 +41,20 @@ export function AddPropertyModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Close modal without mutating data
+
+    if (onAdd) {
+      onAdd({
+        name: formData.name,
+        address: formData.address,
+        valuation: Number(formData.valuation) || 0,
+        loanRemaining: Number(formData.loanRemaining) || 0,
+        expenses: Number(formData.expenses) || 0,
+        income: Number(formData.income) || 0,
+      });
+    }
+
+    // Close modal and reset form
     onOpenChange(false);
-    // Reset form
     setFormData({
       name: "",
       address: "",

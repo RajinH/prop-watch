@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Building2, Wallet, TrendingUp, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PropertyCard } from "@/components/property-card";
@@ -13,13 +13,14 @@ import {
   LvrDistributionChart,
 } from "@/components/portfolio-charts";
 import {
-  properties,
   portfolioHistory,
   cashFlowData,
   calculatePortfolioSummary,
   formatCurrency,
   type TimePeriod,
+  type Property,
 } from "@/lib/data";
+import { getProperties, deleteProperty, addProperty } from "@/lib/storage";
 
 function SummaryCard({
   title,
@@ -51,6 +52,25 @@ function SummaryCard({
 export default function Home() {
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("monthly");
   const [modalOpen, setModalOpen] = useState(false);
+  // Lazy initialization from localStorage
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setProperties(getProperties());
+    setHydrated(true);
+  }, []);
+
+  const handleDelete = useCallback((id: string) => {
+    const updated = deleteProperty(id);
+    setProperties(updated);
+  }, []);
+
+  const handleAdd = useCallback((property: Omit<Property, "id" | "lvr">) => {
+    const updated = addProperty(property);
+    setProperties(updated);
+  }, []);
+
   const summary = calculatePortfolioSummary(properties);
 
   return (
@@ -115,6 +135,7 @@ export default function Home() {
                 key={property.id}
                 property={property}
                 timePeriod={timePeriod}
+                onDelete={handleDelete}
               />
             ))}
             <AddPropertyCard onClick={() => setModalOpen(true)} />
@@ -123,7 +144,11 @@ export default function Home() {
       </div>
 
       {/* Add Property Modal */}
-      <AddPropertyModal open={modalOpen} onOpenChange={setModalOpen} />
+      <AddPropertyModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onAdd={handleAdd}
+      />
     </main>
   );
 }

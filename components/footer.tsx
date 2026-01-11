@@ -103,7 +103,9 @@ export function Footer() {
         <Separator className="my-8" />
 
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} PropWatch. All rights reserved.</p>
+          <p>
+            &copy; {new Date().getFullYear()} PropWatch. All rights reserved.
+          </p>
           <p>Made with care for property investors in Australia</p>
         </div>
       </div>

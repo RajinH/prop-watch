@@ -1,4 +1,6 @@
-import { MapPin, TrendingUp, TrendingDown } from "lucide-react";
+"use client";
+
+import { MapPin, TrendingUp, TrendingDown, Trash2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -7,7 +9,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   type Property,
   type TimePeriod,
@@ -16,10 +30,12 @@ import {
   getPeriodLabel,
   getPeriodDisplayName,
 } from "@/lib/data";
+import { useState } from "react";
 
 interface PropertyCardProps {
   property: Property;
   timePeriod?: TimePeriod;
+  onDelete?: (id: string) => void;
 }
 
 function getLvrBadgeVariant(
@@ -56,7 +72,9 @@ function MetricRow({
 export function PropertyCard({
   property,
   timePeriod = "monthly",
+  onDelete,
 }: PropertyCardProps) {
+  const [open, setOpen] = useState(false);
   const income = getValueForPeriod(property.income, timePeriod);
   const expenses = getValueForPeriod(property.expenses, timePeriod);
   const cashFlow = income - expenses;
@@ -65,13 +83,54 @@ export function PropertyCard({
   const periodDisplayName = getPeriodDisplayName(timePeriod);
 
   return (
-    <Card className="h-full">
+    <Card className="h-full relative group">
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">{property.name}</CardTitle>
-        <CardDescription className="flex items-center gap-1">
-          <MapPin className="h-3 w-3" />
-          {property.address}
-        </CardDescription>
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <CardTitle className="text-lg">{property.name}</CardTitle>
+            <CardDescription className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {property.address}
+            </CardDescription>
+          </div>
+          {onDelete && (
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity absolute right-5 top-5 text-muted-foreground hover:text-destructive cursor-pointer"
+                onClick={() => setOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Delete property</span>
+              </Button>
+              <AlertDialog open={open} onOpenChange={setOpen}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Property</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete &quot;{property.name}
+                      &quot;? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setOpen(false)}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        onDelete(property.id);
+                        setOpen(false);
+                      }}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
