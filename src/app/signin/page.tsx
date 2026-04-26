@@ -3,10 +3,10 @@ import AuthForm from "@/components/auth/AuthForm";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 export const metadata = {
-  title: "Create account — PropWatch",
+  title: "Sign in — PropWatch",
 };
 
-export default async function SignUpPage() {
+export default async function SignInPage() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -27,16 +27,13 @@ export default async function SignUpPage() {
 
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-black text-slate-900">
-            Create your account
-          </h1>
+          <h1 className="text-3xl font-black text-slate-900">Welcome back</h1>
           <p className="text-slate-500">
-            Unlock stress testing, rate sensitivity, and portfolio resilience
-            analysis.
+            Sign in to your PropWatch account to view your portfolio.
           </p>
         </div>
 
-        <AuthForm user={user} initialMode="signup" />
+        <AuthForm user={user} initialMode="signin" />
       </div>
     </main>
   );

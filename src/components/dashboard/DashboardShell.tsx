@@ -2,38 +2,64 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import type { User, Session } from '@supabase/supabase-js'
 import type { Portfolio } from '@/engine/types'
-import { loadPortfolio } from '@/lib/storage'
+import { loadPortfolio, saveDisplayName, loadDisplayName } from '@/lib/storage'
+import UserInfoCard from '@/components/auth/UserInfoCard'
 
-export default function DashboardShell() {
+interface Props {
+  user: User | null
+  session: Session | null
+}
+
+export default function DashboardShell({ user, session }: Props) {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [displayName, setDisplayName] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     setPortfolio(loadPortfolio())
+
+    if (user) {
+      const nameFromUser =
+        (user.user_metadata?.full_name as string | undefined) ??
+        user.email?.split('@')[0] ??
+        ''
+      if (nameFromUser) saveDisplayName(nameFromUser)
+    }
+
+    setDisplayName(loadDisplayName())
     setLoaded(true)
-  }, [])
+  }, [user])
 
   if (!loaded) return null
 
   const properties = portfolio?.properties ?? []
 
+  const greeting = displayName ? `Welcome, ${displayName}` : 'Welcome'
+
   if (properties.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <p className="text-slate-500">No properties yet.</p>
-        <Link
-          href="/onboarding"
-          className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
-        >
-          Add your first property →
-        </Link>
+      <div className="flex flex-col gap-6">
+        <h1 className="text-2xl font-bold text-slate-900">{greeting}</h1>
+        {user && <UserInfoCard user={user} session={session} />}
+        <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <p className="text-slate-500">No properties yet.</p>
+          <Link
+            href="/onboarding"
+            className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
+          >
+            Add your first property →
+          </Link>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-bold text-slate-900">{greeting}</h1>
+      {user && <UserInfoCard user={user} session={session} />}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-900">Your portfolio</h2>
         <Link

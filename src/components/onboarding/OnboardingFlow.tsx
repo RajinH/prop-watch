@@ -1,10 +1,11 @@
 'use client'
 
 import { useReducer, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { OnboardingDraft, OnboardingState, OnboardingStep, Property } from '@/engine/types'
 import { getDefaultExpenses } from '@/engine/cashflow'
 import { computeInsights } from '@/engine/insights'
-import { addPropertyToPortfolio, loadOnboardingDraft, saveOnboardingDraft, clearOnboardingDraft } from '@/lib/storage'
+import { addPropertyToPortfolio, loadOnboardingDraft, saveOnboardingDraft, clearOnboardingDraft, hasCompletedOnboarding, saveOnboardingComplete } from '@/lib/storage'
 import ProgressBar from './ProgressBar'
 import ResumePrompt from './ResumePrompt'
 import StepNickname from './StepNickname'
@@ -115,14 +116,19 @@ export default function OnboardingFlow() {
   const [state, dispatch] = useReducer(reducer, { step: 'nickname', draft: {} })
   const [showResume, setShowResume] = useState(false)
   const [savedProperty, setSavedProperty] = useState<Property | null>(null)
+  const router = useRouter()
 
   useEffect(() => {
+    if (hasCompletedOnboarding()) {
+      router.replace('/dashboard')
+      return
+    }
     const draft = loadOnboardingDraft()
     if (draft && Object.keys(draft).length > 0) {
       dispatch({ type: 'RESUME', draft })
       setShowResume(true)
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
     if (state.step !== 'insights' && Object.keys(state.draft).length > 0) {
@@ -135,6 +141,7 @@ export default function OnboardingFlow() {
     const property = buildProperty(state.draft as OnboardingDraft)
     addPropertyToPortfolio(property)
     clearOnboardingDraft()
+    saveOnboardingComplete()
     setSavedProperty(property)
     dispatch({ type: 'COMPLETE' })
   }

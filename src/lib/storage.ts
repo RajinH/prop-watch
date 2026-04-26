@@ -3,6 +3,8 @@ import type { Portfolio, Property, OnboardingDraft, UserAccount } from '@/engine
 const PORTFOLIO_KEY = 'propwatch_portfolio'
 const DRAFT_KEY = 'propwatch_onboarding_draft'
 const USER_KEY = 'propwatch_user'
+const DISPLAY_NAME_KEY = 'propwatch_display_name'
+const ONBOARDING_COMPLETE_KEY = 'propwatch_onboarding_complete'
 const CURRENT_VERSION = 1
 
 function isClient(): boolean {
@@ -86,4 +88,32 @@ export function loadUser(): UserAccount | null {
   } catch {
     return null
   }
+}
+
+export function saveDisplayName(name: string): void {
+  if (!isClient()) return
+  try {
+    localStorage.setItem(DISPLAY_NAME_KEY, name)
+  } catch {
+    // noop
+  }
+}
+
+export function loadDisplayName(): string | null {
+  if (!isClient()) return null
+  return localStorage.getItem(DISPLAY_NAME_KEY)
+}
+
+export function saveOnboardingComplete(): void {
+  if (!isClient()) return
+  try {
+    localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true')
+  } catch {
+    // noop
+  }
+}
+
+export function hasCompletedOnboarding(): boolean {
+  if (!isClient()) return false
+  return localStorage.getItem(ONBOARDING_COMPLETE_KEY) === 'true'
 }

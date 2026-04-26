@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Red_Hat_Display } from "next/font/google";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 import "./globals.css";
 
 const redHatDisplay = Red_Hat_Display({
@@ -26,7 +27,7 @@ export default function RootLayout({
           fontFamily: "var(--font-red-hat-display), system-ui, sans-serif",
         }}
       >
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );
