@@ -10,8 +10,29 @@ const redHatDisplay = Red_Hat_Display({
 });
 
 export const metadata: Metadata = {
-  title: "PropWatch — Bring Clarity to Property Portfolio Management",
-  description: "Property portfolio management for investors",
+  title: {
+    default: "PropWatch — Property Portfolio Intelligence",
+    template: "%s — PropWatch",
+  },
+  description:
+    "Track, analyse, and stress-test your property portfolio in one place.",
+  metadataBase: new URL("https://prop-watch-gray.vercel.app"),
+  openGraph: {
+    title: "PropWatch — Property Portfolio Intelligence",
+    description:
+      "Track, analyse, and stress-test your property portfolio in one place.",
+    url: "https://prop-watch-gray.vercel.app",
+    siteName: "PropWatch",
+    locale: "en_AU",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "PropWatch — Property Portfolio Intelligence",
+    description:
+      "Track, analyse, and stress-test your property portfolio in one place.",
+  },
+  themeColor: "#166534",
 };
 
 export default function RootLayout({
