@@ -9,8 +9,8 @@ const redHatDisplay = Red_Hat_Display({
 });
 
 export const metadata: Metadata = {
-  title: "PropWatch — Can I afford this property?",
-  description: "Instant property investment decision engine. No sign-up. No backend.",
+  title: "PropWatch — Bring Clarity to Property Portfolio Management",
+  description: "Property portfolio management for investors",
 };
 
 export default function RootLayout({
@@ -20,7 +20,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${redHatDisplay.variable} h-full antialiased`}>
-      <body className="min-h-full" style={{ fontFamily: "var(--font-red-hat-display), system-ui, sans-serif" }}>
+      <body
+        className="min-h-full"
+        style={{
+          fontFamily: "var(--font-red-hat-display), system-ui, sans-serif",
+        }}
+      >
         {children}
       </body>
     </html>
