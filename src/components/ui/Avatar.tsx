@@ -20,8 +20,9 @@ export default function Avatar({ src, name, size = 40 }: AvatarProps) {
       <img
         src={src}
         alt={name}
+        referrerPolicy="no-referrer"
         onError={() => setImgError(true)}
-        className="rounded-full object-cover flex-shrink-0"
+        className="rounded-full object-cover shrink-0"
         style={style}
       />
     );
@@ -29,7 +30,7 @@ export default function Avatar({ src, name, size = 40 }: AvatarProps) {
 
   return (
     <div
-      className="rounded-full bg-green-800 flex items-center justify-center flex-shrink-0 text-white font-semibold select-none"
+      className="rounded-full bg-green-800 flex items-center justify-center shrink-0 text-white font-semibold select-none"
       style={style}
       aria-label={name}
     >

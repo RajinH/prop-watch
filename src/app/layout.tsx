@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Red_Hat_Display } from "next/font/google";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import "./globals.css";
@@ -32,6 +32,9 @@ export const metadata: Metadata = {
     description:
       "Track, analyse, and stress-test your property portfolio in one place.",
   },
+};
+
+export const viewport: Viewport = {
   themeColor: "#166534",
 };
 

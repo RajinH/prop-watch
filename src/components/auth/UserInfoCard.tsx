@@ -41,11 +41,11 @@ export default function UserInfoCard({ user, session }: Props) {
   const provider = (user.app_metadata?.provider as string | undefined) ?? "email";
 
   const sessionExpiry = session?.expires_at
-    ? new Date(session.expires_at * 1000).toLocaleString()
+    ? new Date(session.expires_at * 1000).toLocaleString("en-AU")
     : "—";
 
   const lastSignIn = user.last_sign_in_at
-    ? new Date(user.last_sign_in_at).toLocaleString()
+    ? new Date(user.last_sign_in_at).toLocaleString("en-AU")
     : "—";
 
   async function handleSignOut() {
