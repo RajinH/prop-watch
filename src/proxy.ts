@@ -1,21 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseServerClient } from "./lib/supabase/server-client";
+import { createServerClient } from "@supabase/ssr";
 
-/**
- * Next.js 16 proxy entry point responsible for auth gating.
- *
- * Runtime: Node.js (not Edge), so the shared cookie store used by Supabase is
- * accessible via next/headers. Token refresh happens in Server Actions and
- * Route Handlers — the proxy only performs an optimistic auth check.
- */
+// The proxy runs in Edge Runtime — next/headers is not available here.
+// Cookies must be read from and written to the request/response directly.
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+    request: { headers: request.headers },
   });
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
