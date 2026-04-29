@@ -6,6 +6,8 @@ import type { OnboardingDraft, OnboardingState, OnboardingStep, Property } from 
 import { getDefaultExpenses } from '@/engine/cashflow'
 import { computeInsights } from '@/engine/insights'
 import { addPropertyToPortfolio, loadOnboardingDraft, saveOnboardingDraft, clearOnboardingDraft, hasCompletedOnboarding, saveOnboardingComplete } from '@/lib/storage'
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser-client'
+import { apiPost } from '@/lib/propwatch/api/client'
 import ProgressBar from './ProgressBar'
 import ResumePrompt from './ResumePrompt'
 import StepNickname from './StepNickname'
@@ -116,6 +118,7 @@ export default function OnboardingFlow() {
   const [state, dispatch] = useReducer(reducer, { step: 'nickname', draft: {} })
   const [showResume, setShowResume] = useState(false)
   const [savedProperty, setSavedProperty] = useState<Property | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -136,8 +139,23 @@ export default function OnboardingFlow() {
     }
   }, [state.draft, state.step])
 
-  function handleConfirmReview() {
+  async function handleConfirmReview() {
     if (!isDraftComplete(state.draft)) return
+
+    const { data: { user } } = await getSupabaseBrowserClient().auth.getUser()
+    if (user) {
+      setIsAuthenticated(true)
+      const draft = state.draft as OnboardingDraft
+      apiPost('/api/properties', {
+        name: draft.nickname,
+        current_value: draft.estimatedValue,
+        current_debt: draft.outstandingMortgage,
+        monthly_repayment: draft.monthlyMortgagePayment,
+        monthly_rent: draft.isTenanted ? (draft.monthlyRent ?? 0) : 0,
+        annual_expenses: draft.annualExpenses ?? getDefaultExpenses(draft.estimatedValue, draft.monthlyRent),
+      }).catch(() => {})
+    }
+
     const property = buildProperty(state.draft as OnboardingDraft)
     addPropertyToPortfolio(property)
     clearOnboardingDraft()
@@ -209,7 +227,7 @@ export default function OnboardingFlow() {
         />
       )}
       {isInsights && insights && (
-        <InsightsReveal insights={insights} />
+        <InsightsReveal insights={insights} isAuthenticated={isAuthenticated} />
       )}
     </div>
   )

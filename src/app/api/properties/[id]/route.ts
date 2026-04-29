@@ -1,8 +1,7 @@
 import { z } from 'zod'
-import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import { upsertPropertySnapshot, upsertPortfolioSnapshot, refreshInsights } from '@/lib/propwatch/db/snapshotHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getAuthUser } from '@/lib/propwatch/api/getAuthUser'
+import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 import type { Property } from '@/lib/propwatch/engine/types'
 
 const updatePropertySchema = z
@@ -22,8 +21,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createSupabaseServerClient()
-  const user = await getAuthUser(supabase, request)
+  const { supabase, user } = await getSupabaseWithUser(request)
   if (!user) return err('Unauthorized', 401)
 
   const { id } = await params
@@ -32,7 +30,6 @@ export async function PATCH(
   const parsed = updatePropertySchema.safeParse(body)
   if (!parsed.success) return err(parsed.error.issues[0]?.message ?? 'Invalid input', 400)
 
-  // RLS will return null if property doesn't belong to user
   const { data: existing } = await supabase
     .from('properties')
     .select('*')
@@ -76,13 +73,11 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createSupabaseServerClient()
-  const user = await getAuthUser(supabase, request)
+  const { supabase, user } = await getSupabaseWithUser(request)
   if (!user) return err('Unauthorized', 401)
 
   const { id } = await params
 
-  // RLS will return null if property doesn't belong to user
   const { data: existing } = await supabase
     .from('properties')
     .select('id, portfolio_id')
@@ -98,7 +93,6 @@ export async function DELETE(
 
   if (deleteErr) return err('Failed to delete property', 500)
 
-  // Fetch remaining properties after deletion
   const { data: remaining } = await supabase
     .from('properties')
     .select('*')
@@ -115,7 +109,6 @@ export async function DELETE(
     await refreshInsights(supabase, existing.portfolio_id, portfolioSnap, remainingProps)
     return ok({ success: true, portfolioSnapshot: portfolioSnap })
   } else {
-    // No properties left — clear active insights
     await supabase
       .from('insights')
       .delete()

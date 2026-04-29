@@ -1,7 +1,6 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getAuthUser } from '@/lib/propwatch/api/getAuthUser'
+import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 0,
@@ -11,14 +10,12 @@ const SEVERITY_WEIGHT: Record<string, number> = {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient()
-  const user = await getAuthUser(supabase, request)
+  const { supabase, user } = await getSupabaseWithUser(request)
   if (!user) return err('Unauthorized', 401)
 
   const portfolio = await resolvePortfolio(supabase, user.id)
   if (!portfolio) return err('Failed to resolve portfolio', 500)
 
-  // Fetch all data in parallel
   const [portfolioSnapResult, propertiesResult, insightsResult] = await Promise.all([
     supabase
       .from('portfolio_snapshots')
@@ -43,7 +40,6 @@ export async function GET(request: Request) {
   const properties = propertiesResult.data ?? []
   const propertyIds = properties.map((p) => p.id)
 
-  // Fetch latest snapshot per property (deduplicated in JS)
   let propertySnapshots: Record<string, unknown> = {}
   if (propertyIds.length > 0) {
     const { data: allSnaps } = await supabase
@@ -52,7 +48,6 @@ export async function GET(request: Request) {
       .in('property_id', propertyIds)
       .order('snapshot_date', { ascending: false })
 
-    // Keep first (latest) snapshot per property_id
     for (const snap of allSnaps ?? []) {
       if (!(snap.property_id in propertySnapshots)) {
         propertySnapshots[snap.property_id] = snap
@@ -60,7 +55,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // Sort insights by severity priority
   const insights = (insightsResult.data ?? []).sort(
     (a, b) =>
       (SEVERITY_WEIGHT[a.severity] ?? 99) - (SEVERITY_WEIGHT[b.severity] ?? 99)

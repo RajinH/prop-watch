@@ -1,9 +1,8 @@
 import { z } from 'zod'
-import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { runScenario } from '@/lib/propwatch/engine/runScenario'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getAuthUser } from '@/lib/propwatch/api/getAuthUser'
+import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 import type { Property, PortfolioSnapshotInsert } from '@/lib/propwatch/engine/types'
 
 const scenarioRunSchema = z.object({
@@ -16,8 +15,7 @@ const scenarioRunSchema = z.object({
 })
 
 export async function POST(request: Request) {
-  const supabase = await createSupabaseServerClient()
-  const user = await getAuthUser(supabase, request)
+  const { supabase, user } = await getSupabaseWithUser(request)
   if (!user) return err('Unauthorized', 401)
 
   const body = await request.json()
@@ -27,7 +25,6 @@ export async function POST(request: Request) {
   const portfolio = await resolvePortfolio(supabase, user.id)
   if (!portfolio) return err('Failed to resolve portfolio', 500)
 
-  // Fetch latest portfolio snapshot
   const { data: portfolioSnap } = await supabase
     .from('portfolio_snapshots')
     .select('*')
@@ -38,7 +35,6 @@ export async function POST(request: Request) {
 
   if (!portfolioSnap) return err('No portfolio snapshot found. Add properties first.', 404)
 
-  // Fetch all current properties
   const { data: properties } = await supabase
     .from('properties')
     .select('*')

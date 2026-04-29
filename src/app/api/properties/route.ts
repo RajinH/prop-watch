@@ -1,9 +1,8 @@
 import { z } from 'zod'
-import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { upsertPropertySnapshot, upsertPortfolioSnapshot, refreshInsights } from '@/lib/propwatch/db/snapshotHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getAuthUser } from '@/lib/propwatch/api/getAuthUser'
+import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 import type { Property } from '@/lib/propwatch/engine/types'
 
 const createPropertySchema = z.object({
@@ -18,8 +17,7 @@ const createPropertySchema = z.object({
 })
 
 export async function POST(request: Request) {
-  const supabase = await createSupabaseServerClient()
-  const user = await getAuthUser(supabase, request)
+  const { supabase, user } = await getSupabaseWithUser(request)
   if (!user) return err('Unauthorized', 401)
 
   const body = await request.json()

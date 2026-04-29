@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server-client'
+import DashboardShell from '@/components/dashboard/DashboardShell'
 
 export const metadata = {
   title: 'Dashboard',
@@ -6,23 +7,29 @@ export const metadata = {
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const displayName =
-    (user?.user_metadata?.full_name as string | undefined) ||
-    user?.email?.split('@')[0] ||
-    'there'
+  await supabase
+    .from('profiles')
+    .upsert({ id: user!.id }, { onConflict: 'id', ignoreDuplicates: true })
 
-  return (
-    <div className="flex flex-col gap-2">
-      <h1 className="text-3xl font-black text-slate-900">
-        Welcome, {displayName}
-      </h1>
-      <p className="text-slate-500">
-        Your property portfolio overview will appear here.
-      </p>
-    </div>
-  )
+  const { data: portfolio } = await supabase
+    .from('portfolios')
+    .select('id, name')
+    .eq('user_id', user!.id)
+    .order('created_at')
+    .limit(1)
+    .maybeSingle()
+
+  const insights = portfolio
+    ? (await supabase
+        .from('insights')
+        .select('id, type, severity, title, description, impact')
+        .eq('portfolio_id', portfolio.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+      ).data ?? []
+    : []
+
+  return <DashboardShell user={user} insights={insights} hasPortfolio={!!portfolio} />
 }

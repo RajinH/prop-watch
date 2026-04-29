@@ -1,8 +1,7 @@
 import { z } from 'zod'
-import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getAuthUser } from '@/lib/propwatch/api/getAuthUser'
+import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 
 const scenarioSaveSchema = z.object({
   name: z.string().min(1).max(200),
@@ -10,8 +9,7 @@ const scenarioSaveSchema = z.object({
 })
 
 export async function POST(request: Request) {
-  const supabase = await createSupabaseServerClient()
-  const user = await getAuthUser(supabase, request)
+  const { supabase, user } = await getSupabaseWithUser(request)
   if (!user) return err('Unauthorized', 401)
 
   const body = await request.json()
