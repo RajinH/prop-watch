@@ -45,6 +45,8 @@ export async function refreshInsights(
     .eq('status', 'active')
 
   if (insights.length > 0) {
-    await supabase.from('insights').insert(insights)
+    await supabase.from('insights').insert(
+      insights.map((i) => ({ ...i, metadata: i.metadata ?? {} }))
+    )
   }
 }

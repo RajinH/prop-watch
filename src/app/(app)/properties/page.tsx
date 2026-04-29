@@ -8,15 +8,16 @@ export const metadata = {
 export default async function PropertiesPage() {
   const supabase = await createSupabaseServerClient()
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
 
   await supabase
     .from('profiles')
-    .upsert({ id: user!.id }, { onConflict: 'id', ignoreDuplicates: true })
+    .upsert({ id: user.id }, { onConflict: 'id', ignoreDuplicates: true })
 
   const { data: portfolio } = await supabase
     .from('portfolios')
     .select('id')
-    .eq('user_id', user!.id)
+    .eq('user_id', user.id)
     .order('created_at')
     .limit(1)
     .maybeSingle()

@@ -10,6 +10,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export async function apiGet<T>(path: string): Promise<T> {
+  const res = await fetch(path, { method: 'GET' })
+  return handleResponse<T>(res)
+}
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',

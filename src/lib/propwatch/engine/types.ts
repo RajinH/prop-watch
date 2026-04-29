@@ -22,6 +22,8 @@ export type PropertySnapshotInsert = {
   yield: number | null
 }
 
+export type PropertySnapshot = PropertySnapshotInsert & { id?: string }
+
 export type PortfolioSnapshotInsert = {
   portfolio_id: string
   snapshot_date: string
@@ -41,7 +43,23 @@ export type InsightInsert = {
   title: string
   description: string
   impact?: number
+  metadata?: Record<string, unknown>
   status: 'active'
+}
+
+export type RiskProfile = {
+  overall: number
+  label: 'low' | 'moderate' | 'high' | 'critical'
+  interest_rate: number
+  cashflow: number
+  concentration: number
+  liquidity: number
+}
+
+export type SensitivityResult = {
+  rate_breakeven_pct: number | null
+  vacancy_breakeven_weeks: number | null
+  expense_shock_pct: number | null
 }
 
 export type ScenarioAssumptions = {

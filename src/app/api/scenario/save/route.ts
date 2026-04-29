@@ -5,7 +5,7 @@ import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 
 const scenarioSaveSchema = z.object({
   name: z.string().min(1).max(200),
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
 })
 
 export async function POST(request: Request) {

@@ -1,4 +1,10 @@
 import type { Property, PortfolioSnapshotInsert, InsightInsert } from './types'
+import { computeSensitivity } from './computeSensitivity'
+import { computePropertySnapshot } from './computePropertySnapshot'
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 export function generateInsights(
   portfolioId: string,
@@ -100,6 +106,79 @@ export function generateInsights(
       description: `${missingData.length} propert${missingData.length === 1 ? 'y is' : 'ies are'} missing purchase price or date. Add this to unlock capital growth tracking.`,
       status: 'active',
     })
+  }
+
+  // Rules 8–10 require sensitivity computation
+  const sensitivity = computeSensitivity(snapshot, properties)
+
+  // Rule 8: rate sensitivity warning
+  const { rate_breakeven_pct } = sensitivity
+  if (rate_breakeven_pct !== null && rate_breakeven_pct < 1.5) {
+    insights.push({
+      portfolio_id: portfolioId,
+      type: 'rate_sensitivity',
+      severity: rate_breakeven_pct < 0.5 ? 'critical' : 'warning',
+      title: 'High interest rate sensitivity',
+      description: `Your portfolio goes cash flow negative at just +${rate_breakeven_pct.toFixed(2)}% in interest rates.`,
+      impact: rate_breakeven_pct,
+      metadata: { rate_breakeven_pct },
+      status: 'active',
+    })
+  } else if (rate_breakeven_pct === null && snapshot.monthly_cashflow <= 0) {
+    // Already negative — still surface as a rate insight if LVR is notable
+    if (snapshot.weighted_lvr !== null && snapshot.weighted_lvr >= 0.5) {
+      insights.push({
+        portfolio_id: portfolioId,
+        type: 'rate_sensitivity',
+        severity: 'warning',
+        title: 'Cash flow already negative',
+        description: `Your portfolio is already cash flow negative. Any rate increase will deepen the deficit.`,
+        metadata: { rate_breakeven_pct: null },
+        status: 'active',
+      })
+    }
+  }
+
+  // Rule 9: yield opportunity (per-property)
+  const dateStr = today()
+  for (const property of properties) {
+    if (property.monthly_rent <= 0) continue
+    const propSnap = computePropertySnapshot(property, dateStr)
+    const grossYield = propSnap.yield
+    if (grossYield !== null && grossYield < 0.04) {
+      insights.push({
+        portfolio_id: portfolioId,
+        property_id: property.id,
+        type: 'opportunity_yield',
+        severity: 'info',
+        title: `Low yield on ${property.name}`,
+        description: `${property.name} has a gross yield of ${(grossYield * 100).toFixed(1)}% — below the typical 4% threshold. Review rent or consider refinancing.`,
+        impact: grossYield,
+        metadata: { property_name: property.name, gross_yield: grossYield },
+        status: 'active',
+      })
+    }
+  }
+
+  // Rule 10: all properties negatively geared
+  if (properties.length > 0) {
+    const dateStr2 = today()
+    const allNegative = properties.every((p) => {
+      const snap = computePropertySnapshot(p, dateStr2)
+      return snap.monthly_cashflow < 0
+    })
+    if (allNegative) {
+      insights.push({
+        portfolio_id: portfolioId,
+        type: 'gap_all_negative',
+        severity: 'warning',
+        title: 'All properties negatively geared',
+        description: `Every property in your portfolio is negatively geared. Your total monthly deficit is $${Math.abs(snapshot.monthly_cashflow).toFixed(0)}.`,
+        impact: snapshot.monthly_cashflow,
+        metadata: { total_monthly_deficit: snapshot.monthly_cashflow },
+        status: 'active',
+      })
+    }
   }
 
   return insights
