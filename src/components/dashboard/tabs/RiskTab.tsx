@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer,
 } from 'recharts'
-import type { RiskProfile, SensitivityResult, PortfolioSnapshotInsert } from '@/lib/propwatch/engine/types'
+import type { RiskProfile, SensitivityResult, PortfolioSnapshotInsert, PropertyDebtProjection } from '@/lib/propwatch/engine/types'
 
 interface InsightRow {
   id: string
@@ -21,6 +21,7 @@ interface Props {
   sensitivity: SensitivityResult
   portfolioSnapshot: PortfolioSnapshotInsert
   insights: InsightRow[]
+  debtProjections: PropertyDebtProjection[]
 }
 
 const LABEL_STYLES: Record<string, string> = {
@@ -46,7 +47,9 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
 
 const STRESS_TYPES = new Set(['rate_sensitivity', 'lvr_high', 'cashflow_negative', 'lvr_moderate'])
 
-export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: snap, insights }: Props) {
+const DEBT_LINE_COLORS = ['#166534', '#15803d', '#16a34a', '#22c55e', '#86efac']
+
+export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: snap, insights, debtProjections }: Props) {
   const stressInsights = insights.filter((i) => STRESS_TYPES.has(i.type))
 
   // Generate sensitivity line chart data (client-side, no API)
@@ -157,6 +160,76 @@ export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: s
               <p className="text-sm text-slate-500">{i.description}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Debt paydown projection */}
+      {debtProjections.some((d) => d.curve.length > 1) && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Debt paydown projection</p>
+            <p className="text-xs text-slate-400 mt-0.5">Projected remaining debt over time based on current repayments</p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="year"
+                  type="number"
+                  allowDuplicatedCategory={false}
+                  tick={{ fontSize: 10 }}
+                  label={{ value: 'Years from now', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#94a3b8' }}
+                />
+                <YAxis tickFormatter={(v) => '$' + (Number(v) / 1000).toFixed(0) + 'k'} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v) => ['$' + Number(v).toLocaleString('en-AU', { maximumFractionDigits: 0 }), 'Balance']} labelFormatter={(l) => `Year ${l}`} />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                {debtProjections
+                  .filter((d) => d.curve.length > 1)
+                  .map((d, i) => (
+                    <Line
+                      key={d.property_id}
+                      data={d.curve}
+                      type="monotone"
+                      dataKey="balance"
+                      name={d.property_name}
+                      stroke={DEBT_LINE_COLORS[i % DEBT_LINE_COLORS.length]}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {/* Payoff table */}
+          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Property</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Rate</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Interest</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Paid off by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {debtProjections.map((d) => (
+                  <tr key={d.property_id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{d.property_name}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                      {d.effective_annual_rate !== null ? d.effective_annual_rate.toFixed(2) + '%' : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                      {d.total_interest_cost !== null ? '$' + d.total_interest_cost.toLocaleString('en-AU', { maximumFractionDigits: 0 }) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                      {d.payoff_year !== null ? d.payoff_year.toString() : '> 40 yrs'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

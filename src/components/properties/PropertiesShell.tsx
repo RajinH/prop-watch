@@ -17,6 +17,16 @@ interface PropertyRow {
   annual_expenses: number
   purchase_price: number | null
   purchase_date: string | null
+  loan_type: string | null
+  interest_rate: number | null
+  interest_rate_type: string | null
+  loan_term_years: number | null
+  lender: string | null
+  fixed_rate_expiry: string | null
+  insurer: string | null
+  annual_insurance_premium: number | null
+  insurance_policy_type: string | null
+  insurance_renewal_date: string | null
   [key: string]: unknown
 }
 

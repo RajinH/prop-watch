@@ -14,6 +14,18 @@ const createPropertySchema = z.object({
   annual_expenses: z.number().nonnegative(),
   purchase_price: z.number().positive().optional(),
   purchase_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Loan details
+  loan_type: z.enum(['principal_and_interest', 'interest_only']).optional(),
+  interest_rate: z.number().min(0).max(1).optional(),
+  interest_rate_type: z.enum(['variable', 'fixed', 'split']).optional(),
+  loan_term_years: z.number().int().positive().optional(),
+  lender: z.string().max(200).optional(),
+  fixed_rate_expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Insurance details
+  insurer: z.string().max(200).optional(),
+  annual_insurance_premium: z.number().nonnegative().optional(),
+  insurance_policy_type: z.enum(['landlord', 'building', 'contents', 'combined']).optional(),
+  insurance_renewal_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 export async function POST(request: Request) {

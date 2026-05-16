@@ -3,9 +3,15 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
-import type { Property, PortfolioSnapshotInsert, PropertySnapshot, RiskProfile, SensitivityResult } from '@/lib/propwatch/engine/types'
+import type {
+  Property, PortfolioSnapshotInsert, PropertySnapshot, RiskProfile, SensitivityResult,
+  CapitalGrowthSummary, AcquisitionCapacity, PropertyDebtProjection,
+  AfterTaxCashflow, GoalProgress, PropertyRank, PortfolioHistoryPoint,
+} from '@/lib/propwatch/engine/types'
 import ActionHub from './ActionHub'
+import GoalBanner from './GoalBanner'
 import PortfolioTab from './tabs/PortfolioTab'
+import GrowthTab from './tabs/GrowthTab'
 import RiskTab from './tabs/RiskTab'
 import InsightsTab from './tabs/InsightsTab'
 import ScenariosTab from './tabs/ScenariosTab'
@@ -29,12 +35,21 @@ interface Props {
   riskProfile: RiskProfile | null
   sensitivity: SensitivityResult | null
   hasPortfolio: boolean
+  capitalGrowth: CapitalGrowthSummary | null
+  acquisitionCapacity: AcquisitionCapacity | null
+  debtProjections: PropertyDebtProjection[]
+  afterTaxCashflow: AfterTaxCashflow | null
+  goalProgress: GoalProgress | null
+  taxBracket: number
+  rankedProperties: PropertyRank[]
+  portfolioHistory: PortfolioHistoryPoint[]
 }
 
-type Tab = 'portfolio' | 'risk' | 'insights' | 'scenarios'
+type Tab = 'portfolio' | 'growth' | 'risk' | 'insights' | 'scenarios'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'portfolio', label: 'Portfolio' },
+  { id: 'growth', label: 'Growth' },
   { id: 'risk', label: 'Risk' },
   { id: 'insights', label: 'Insights' },
   { id: 'scenarios', label: 'Scenarios' },
@@ -49,6 +64,14 @@ export default function DashboardShell({
   riskProfile,
   sensitivity,
   hasPortfolio,
+  capitalGrowth,
+  acquisitionCapacity,
+  debtProjections,
+  afterTaxCashflow,
+  goalProgress,
+  taxBracket,
+  rankedProperties,
+  portfolioHistory,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio')
 
@@ -91,6 +114,9 @@ export default function DashboardShell({
           {/* Action Hub */}
           <ActionHub insights={insights} onTabChange={(tab) => setActiveTab(tab as Tab)} />
 
+          {/* Goal Banner */}
+          <GoalBanner goalProgress={goalProgress} taxBracket={taxBracket} />
+
           {/* Tab bar */}
           <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
             {TABS.map((tab) => (
@@ -114,6 +140,15 @@ export default function DashboardShell({
               portfolioSnapshot={portfolioSnapshot}
               properties={properties}
               propertySnapshots={propertySnapshots}
+              afterTaxCashflow={afterTaxCashflow}
+              rankedProperties={rankedProperties}
+            />
+          )}
+          {activeTab === 'growth' && capitalGrowth && acquisitionCapacity && (
+            <GrowthTab
+              capitalGrowth={capitalGrowth}
+              acquisitionCapacity={acquisitionCapacity}
+              portfolioHistory={portfolioHistory}
             />
           )}
           {activeTab === 'risk' && riskProfile && sensitivity && (
@@ -122,6 +157,7 @@ export default function DashboardShell({
               sensitivity={sensitivity}
               portfolioSnapshot={portfolioSnapshot}
               insights={insights}
+              debtProjections={debtProjections}
             />
           )}
           {activeTab === 'insights' && (

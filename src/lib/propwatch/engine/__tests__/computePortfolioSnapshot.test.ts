@@ -5,6 +5,13 @@ import type { Property } from '../types'
 const DATE = '2026-04-27'
 const PORTFOLIO_ID = 'port-1'
 
+const NULL_LOAN_INSURANCE = {
+  loan_type: null, interest_rate: null, interest_rate_type: null,
+  loan_term_years: null, lender: null, fixed_rate_expiry: null,
+  insurer: null, annual_insurance_premium: null, insurance_policy_type: null,
+  insurance_renewal_date: null,
+} as const
+
 const prop1: Property = {
   id: 'prop-1',
   portfolio_id: PORTFOLIO_ID,
@@ -16,6 +23,7 @@ const prop1: Property = {
   annual_expenses: 6000,
   purchase_price: null,
   purchase_date: null,
+  ...NULL_LOAN_INSURANCE,
 }
 
 const prop2: Property = {
@@ -29,6 +37,7 @@ const prop2: Property = {
   annual_expenses: 4800,
   purchase_price: null,
   purchase_date: null,
+  ...NULL_LOAN_INSURANCE,
 }
 
 describe('computePortfolioSnapshot', () => {

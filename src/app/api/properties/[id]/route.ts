@@ -14,6 +14,18 @@ const updatePropertySchema = z
     annual_expenses: z.number().nonnegative().optional(),
     purchase_price: z.number().positive().nullable().optional(),
     purchase_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    // Loan details
+    loan_type: z.enum(['principal_and_interest', 'interest_only']).nullable().optional(),
+    interest_rate: z.number().min(0).max(1).nullable().optional(),
+    interest_rate_type: z.enum(['variable', 'fixed', 'split']).nullable().optional(),
+    loan_term_years: z.number().int().positive().nullable().optional(),
+    lender: z.string().max(200).nullable().optional(),
+    fixed_rate_expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    // Insurance details
+    insurer: z.string().max(200).nullable().optional(),
+    annual_insurance_premium: z.number().nonnegative().nullable().optional(),
+    insurance_policy_type: z.enum(['landlord', 'building', 'contents', 'combined']).nullable().optional(),
+    insurance_renewal_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   })
   .refine((obj) => Object.keys(obj).length > 0, { message: 'At least one field is required' })
 

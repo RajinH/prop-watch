@@ -28,8 +28,8 @@ const BADGE_STYLES: Record<string, string> = {
   info: 'bg-slate-100 text-slate-500',
 }
 
-const OPPORTUNITY_TYPES = new Set(['opportunity_yield', 'opportunity_refinance'])
-const GAP_TYPES = new Set(['gap_all_negative', 'concentration_risk'])
+const OPPORTUNITY_TYPES = new Set(['opportunity_yield', 'opportunity_refinance', 'rate_above_market', 'insurance_on_record', 'loan_on_record', 'capital_growth_strong', 'total_return_high', 'equity_unlockable'])
+const GAP_TYPES = new Set(['gap_all_negative', 'concentration_risk', 'loan_fixed_expiry_soon', 'insurance_renewal_soon', 'capital_growth_underperforming', 'equity_locked'])
 
 function InsightCard({ insight }: { insight: InsightRow }) {
   return (

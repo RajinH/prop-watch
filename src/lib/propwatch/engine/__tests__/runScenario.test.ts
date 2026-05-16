@@ -5,6 +5,13 @@ import type { Property, PortfolioSnapshotInsert } from '../types'
 const PORTFOLIO_ID = 'port-1'
 const DATE = '2026-04-27'
 
+const NULL_LOAN_INSURANCE = {
+  loan_type: null, interest_rate: null, interest_rate_type: null,
+  loan_term_years: null, lender: null, fixed_rate_expiry: null,
+  insurer: null, annual_insurance_premium: null, insurance_policy_type: null,
+  insurance_renewal_date: null,
+} as const
+
 const baseProperties: Property[] = [
   {
     id: 'prop-1',
@@ -17,6 +24,7 @@ const baseProperties: Property[] = [
     annual_expenses: 6000,
     purchase_price: null,
     purchase_date: null,
+    ...NULL_LOAN_INSURANCE,
   },
   {
     id: 'prop-2',
@@ -29,6 +37,7 @@ const baseProperties: Property[] = [
     annual_expenses: 4800,
     purchase_price: null,
     purchase_date: null,
+    ...NULL_LOAN_INSURANCE,
   },
 ]
 

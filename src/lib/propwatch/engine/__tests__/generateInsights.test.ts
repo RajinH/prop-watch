@@ -28,6 +28,16 @@ const baseProp = (overrides: Partial<Property> = {}): Property => ({
   annual_expenses: 6000,
   purchase_price: 500000,
   purchase_date: '2020-01-01',
+  loan_type: null,
+  interest_rate: null,
+  interest_rate_type: null,
+  loan_term_years: null,
+  lender: null,
+  fixed_rate_expiry: null,
+  insurer: null,
+  annual_insurance_premium: null,
+  insurance_policy_type: null,
+  insurance_renewal_date: null,
   ...overrides,
 })
 
