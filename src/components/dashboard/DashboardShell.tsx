@@ -1,59 +1,68 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import type { User } from '@supabase/supabase-js'
+import { useState } from "react";
+import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
 import type {
-  Property, PortfolioSnapshotInsert, PropertySnapshot, RiskProfile, SensitivityResult,
-  CapitalGrowthSummary, AcquisitionCapacity, PropertyDebtProjection,
-  AfterTaxCashflow, GoalProgress, PropertyRank, PortfolioHistoryPoint,
-} from '@/lib/propwatch/engine/types'
-import ActionHub from './ActionHub'
-import GoalBanner from './GoalBanner'
-import PortfolioTab from './tabs/PortfolioTab'
-import GrowthTab from './tabs/GrowthTab'
-import RiskTab from './tabs/RiskTab'
-import InsightsTab from './tabs/InsightsTab'
-import ScenariosTab from './tabs/ScenariosTab'
+  Property,
+  PortfolioSnapshotInsert,
+  PropertySnapshot,
+  RiskProfile,
+  SensitivityResult,
+  CapitalGrowthSummary,
+  AcquisitionCapacity,
+  PropertyDebtProjection,
+  AfterTaxCashflow,
+  GoalProgress,
+  PropertyRank,
+  PortfolioHistoryPoint,
+} from "@/lib/propwatch/engine/types";
+import ActionHub from "./ActionHub";
+import GoalBanner from "./GoalBanner";
+import PortfolioTab from "./tabs/PortfolioTab";
+import GrowthTab from "./tabs/GrowthTab";
+import RiskTab from "./tabs/RiskTab";
+import InsightsTab from "./tabs/InsightsTab";
+import ScenariosTab from "./tabs/ScenariosTab";
 
 interface InsightRow {
-  id: string
-  type: string
-  severity: string
-  title: string
-  description: string
-  impact: number | null
-  metadata: Record<string, unknown>
+  id: string;
+  type: string;
+  severity: string;
+  title: string;
+  description: string;
+  impact: number | null;
+  metadata: Record<string, unknown>;
 }
 
 interface Props {
-  user: User | null
-  portfolioSnapshot: PortfolioSnapshotInsert | null
-  properties: Property[]
-  propertySnapshots: Record<string, PropertySnapshot>
-  insights: InsightRow[]
-  riskProfile: RiskProfile | null
-  sensitivity: SensitivityResult | null
-  hasPortfolio: boolean
-  capitalGrowth: CapitalGrowthSummary | null
-  acquisitionCapacity: AcquisitionCapacity | null
-  debtProjections: PropertyDebtProjection[]
-  afterTaxCashflow: AfterTaxCashflow | null
-  goalProgress: GoalProgress | null
-  taxBracket: number
-  rankedProperties: PropertyRank[]
-  portfolioHistory: PortfolioHistoryPoint[]
+  user: User | null;
+  portfolioSnapshot: PortfolioSnapshotInsert | null;
+  properties: Property[];
+  propertySnapshots: Record<string, PropertySnapshot>;
+  insights: InsightRow[];
+  riskProfile: RiskProfile | null;
+  sensitivity: SensitivityResult | null;
+  hasPortfolio: boolean;
+  capitalGrowth: CapitalGrowthSummary | null;
+  acquisitionCapacity: AcquisitionCapacity | null;
+  debtProjections: PropertyDebtProjection[];
+  afterTaxCashflow: AfterTaxCashflow | null;
+  goalProgress: GoalProgress | null;
+  taxBracket: number;
+  rankedProperties: PropertyRank[];
+  portfolioHistory: PortfolioHistoryPoint[];
 }
 
-type Tab = 'portfolio' | 'growth' | 'risk' | 'insights' | 'scenarios'
+type Tab = "portfolio" | "growth" | "risk" | "insights" | "scenarios";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'portfolio', label: 'Portfolio' },
-  { id: 'growth', label: 'Growth' },
-  { id: 'risk', label: 'Risk' },
-  { id: 'insights', label: 'Insights' },
-  { id: 'scenarios', label: 'Scenarios' },
-]
+  { id: "portfolio", label: "Portfolio" },
+  { id: "growth", label: "Growth" },
+  { id: "risk", label: "Risk" },
+  { id: "insights", label: "Insights" },
+  { id: "scenarios", label: "Scenarios" },
+];
 
 export default function DashboardShell({
   user,
@@ -73,20 +82,22 @@ export default function DashboardShell({
   rankedProperties,
   portfolioHistory,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('portfolio')
+  const [activeTab, setActiveTab] = useState<Tab>("portfolio");
 
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
-    user?.email?.split('@')[0] ||
-    'there'
+    user?.email?.split("@")[0] ||
+    "there";
 
-  const noData = !portfolioSnapshot || properties.length === 0
+  const noData = !portfolioSnapshot || properties.length === 0;
 
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-black text-slate-900">Welcome, {displayName}</h1>
+        <h1 className="text-3xl font-black text-slate-900">
+          Welcome, {displayName}
+        </h1>
         <Link
           href="/properties"
           className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
@@ -98,7 +109,9 @@ export default function DashboardShell({
       {/* Empty state */}
       {(!hasPortfolio || noData) && (
         <div className="flex flex-col items-center gap-4 py-20 text-center rounded-2xl border border-dashed border-slate-200">
-          <p className="text-slate-500">No properties yet — add one to unlock your portfolio dashboard.</p>
+          <p className="text-slate-500">
+            No properties yet — add one to unlock your portfolio dashboard.
+          </p>
           <Link
             href="/onboarding"
             className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
@@ -112,7 +125,10 @@ export default function DashboardShell({
       {!noData && portfolioSnapshot && (
         <>
           {/* Action Hub */}
-          <ActionHub insights={insights} onTabChange={(tab) => setActiveTab(tab as Tab)} />
+          <ActionHub
+            insights={insights}
+            onTabChange={(tab) => setActiveTab(tab as Tab)}
+          />
 
           {/* Goal Banner */}
           <GoalBanner goalProgress={goalProgress} taxBracket={taxBracket} />
@@ -125,8 +141,8 @@ export default function DashboardShell({
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
                 }`}
               >
                 {tab.label}
@@ -135,7 +151,7 @@ export default function DashboardShell({
           </div>
 
           {/* Tab panels */}
-          {activeTab === 'portfolio' && (
+          {activeTab === "portfolio" && (
             <PortfolioTab
               portfolioSnapshot={portfolioSnapshot}
               properties={properties}
@@ -144,14 +160,14 @@ export default function DashboardShell({
               rankedProperties={rankedProperties}
             />
           )}
-          {activeTab === 'growth' && capitalGrowth && acquisitionCapacity && (
+          {activeTab === "growth" && capitalGrowth && acquisitionCapacity && (
             <GrowthTab
               capitalGrowth={capitalGrowth}
               acquisitionCapacity={acquisitionCapacity}
               portfolioHistory={portfolioHistory}
             />
           )}
-          {activeTab === 'risk' && riskProfile && sensitivity && (
+          {activeTab === "risk" && riskProfile && sensitivity && (
             <RiskTab
               riskProfile={riskProfile}
               sensitivity={sensitivity}
@@ -160,14 +176,12 @@ export default function DashboardShell({
               debtProjections={debtProjections}
             />
           )}
-          {activeTab === 'insights' && (
-            <InsightsTab insights={insights} />
-          )}
-          {activeTab === 'scenarios' && (
+          {activeTab === "insights" && <InsightsTab insights={insights} />}
+          {activeTab === "scenarios" && (
             <ScenariosTab portfolioSnapshot={portfolioSnapshot} />
           )}
         </>
       )}
     </div>
-  )
+  );
 }

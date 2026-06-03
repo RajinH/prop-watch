@@ -7,6 +7,11 @@ import type { Property } from '@/lib/propwatch/engine/types'
 const updatePropertySchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
+    unit: z.string().max(100).nullable().optional(),
+    street: z.string().max(300).nullable().optional(),
+    city: z.string().max(150).nullable().optional(),
+    postcode: z.string().max(20).nullable().optional(),
+    state: z.string().max(100).nullable().optional(),
     current_value: z.number().nonnegative().optional(),
     current_debt: z.number().nonnegative().optional(),
     monthly_rent: z.number().nonnegative().optional(),
