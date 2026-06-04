@@ -3,9 +3,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { apiPost, apiPatch } from '@/lib/propwatch/api/client'
+import { WandSparkles } from 'lucide-react'
+import { apiPost, apiPatch, apiGet } from '@/lib/propwatch/api/client'
 import { useToast } from '@/components/ui/ToastProvider'
-import AddressAutocomplete from './AddressAutocomplete'
+import AddressAutocomplete, { type AddressFields } from './AddressAutocomplete'
+import {
+  loadHtagAddressKey,
+  saveHtagAddressKey,
+  loadHtagEstimates,
+  saveHtagEstimates,
+  type HtagEstimatesCache,
+} from '@/lib/storage'
 
 interface PropertyRow {
   id: string
@@ -49,6 +57,9 @@ interface FormState {
   city: string
   postcode: string
   state: string
+  // HTAG resolution (wizard-only, not submitted)
+  htag_address_key: string
+  htag_address_label: string
   // Financials
   current_value: string
   current_debt: string
@@ -71,7 +82,13 @@ interface FormState {
   insurance_renewal_date: string
 }
 
-const STEPS = ['Property', 'Financials', 'Extras'] as const
+interface HtagCandidate {
+  address_key: string
+  address_label: string
+  score: number
+}
+
+const STEPS = ['Property', 'Loan & Insurance', 'Financials'] as const
 const LAST_STEP = STEPS.length - 1
 
 export default function PropertyWizard({ mode, property }: Props) {
@@ -100,6 +117,8 @@ export default function PropertyWizard({ mode, property }: Props) {
     city: property?.city ?? '',
     postcode: property?.postcode ?? '',
     state: property?.state ?? '',
+    htag_address_key: '',
+    htag_address_label: '',
     current_value: property?.current_value?.toString() ?? '',
     current_debt: property?.current_debt?.toString() ?? '',
     monthly_rent: property?.monthly_rent?.toString() ?? '',
@@ -124,15 +143,159 @@ export default function PropertyWizard({ mode, property }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // HTAG resolution state
+  const [htagConflicts, setHtagConflicts] = useState<HtagCandidate[]>([])
+  const [htagResolving, setHtagResolving] = useState(false)
+
+  // Prefill state
+  const [prefillLoading, setPrefillLoading] = useState(false)
+  const [prefillError, setPrefillError] = useState<string | null>(null)
+
   function set(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function buildAddressText(fields: {
+    unit: string
+    street: string
+    city: string
+    state: string
+    postcode: string
+  }): string {
+    return [
+      fields.unit ? `${fields.unit}/` : '',
+      fields.street,
+      fields.city,
+      fields.state,
+      fields.postcode,
+      'Australia',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  }
+
+  async function resolveHtagAddress(fields: AddressFields) {
+    const addressText = buildAddressText(fields)
+
+    const cached = loadHtagAddressKey(addressText)
+    if (cached) {
+      setForm((prev) => ({
+        ...prev,
+        htag_address_key: cached.address_key,
+        htag_address_label: cached.address_label,
+      }))
+      setHtagConflicts([])
+      return
+    }
+
+    setHtagResolving(true)
+    try {
+      const data = await apiGet<{ results: HtagCandidate[]; total: number }>(
+        `/api/htag/address-resolve?address=${encodeURIComponent(addressText)}`
+      )
+
+      const results = data.results ?? []
+      if (results.length === 0) return
+
+      const best = results[0]
+      const clearWinner =
+        best.score >= 0.8 &&
+        (results.length === 1 || best.score - results[1].score >= 0.1)
+
+      if (clearWinner) {
+        const entry = {
+          address_key: best.address_key,
+          address_label: best.address_label,
+          cachedAt: new Date().toISOString(),
+        }
+        saveHtagAddressKey(addressText, entry)
+        setForm((prev) => ({
+          ...prev,
+          htag_address_key: best.address_key,
+          htag_address_label: best.address_label,
+        }))
+        setHtagConflicts([])
+      } else {
+        setHtagConflicts(results.slice(0, 4))
+      }
+    } catch {
+      // HTAG is best-effort — never surface resolution errors to the user
+    } finally {
+      setHtagResolving(false)
+    }
+  }
+
+  function applyEstimates(est: HtagEstimatesCache) {
+    setForm((prev) => {
+      const next = { ...prev }
+      if (est.price_estimate != null && !prev.current_value)
+        next.current_value = String(Math.round(est.price_estimate))
+      if (est.rent_estimate != null && !prev.monthly_rent)
+        next.monthly_rent = String(Math.round((est.rent_estimate * 52) / 12))
+      if (est.last_sold_price != null && !prev.purchase_price)
+        next.purchase_price = String(Math.round(est.last_sold_price))
+      if (est.last_sold_date != null && !prev.purchase_date)
+        next.purchase_date = est.last_sold_date
+      return next
+    })
+  }
+
+  async function handlePrefill() {
+    setPrefillError(null)
+    if (!form.htag_address_key) {
+      setPrefillError('Address could not be resolved. Enter financial details manually.')
+      return
+    }
+
+    const cached = loadHtagEstimates(form.htag_address_key)
+    if (cached) {
+      applyEstimates(cached)
+      return
+    }
+
+    setPrefillLoading(true)
+    try {
+      const data = await apiGet<{
+        results: Array<{
+          address_key: string
+          price_estimate: number | null
+          rent_estimate: number | null
+          last_sold_price: number | null
+          last_sold_date: string | null
+        }>
+      }>(`/api/htag/property-estimates?address_key=${encodeURIComponent(form.htag_address_key)}`)
+
+      const est = data.results?.[0]
+      if (!est) {
+        setPrefillError('No estimates available for this property.')
+        return
+      }
+
+      const entry: HtagEstimatesCache = {
+        price_estimate: est.price_estimate,
+        rent_estimate: est.rent_estimate,
+        last_sold_price: est.last_sold_price,
+        last_sold_date: est.last_sold_date,
+        cachedAt: new Date().toISOString(),
+      }
+      saveHtagEstimates(form.htag_address_key, entry)
+      applyEstimates(entry)
+    } catch {
+      setPrefillError('Could not fetch estimates. Please enter values manually.')
+    } finally {
+      setPrefillLoading(false)
+    }
   }
 
   function validateStep(s: number): string | null {
     if (s === 0) {
       if (!form.name.trim()) return 'Give the property a name to continue.'
+      if (!form.street.trim()) return 'Street address is required.'
+      if (!form.city.trim()) return 'City is required.'
+      if (!form.state.trim()) return 'State is required.'
+      if (!form.postcode.trim()) return 'Postcode is required.'
     }
-    if (s === 1) {
+    if (s === 2) {
       if (!form.current_value || Number(form.current_value) <= 0) return 'Current value must be greater than 0.'
       if (form.current_debt === '' || Number(form.current_debt) < 0) return 'Current debt is required.'
       if (form.monthly_rent === '' || Number(form.monthly_rent) < 0) return 'Monthly rent is required (use 0 if vacant).'
@@ -155,7 +318,6 @@ export default function PropertyWizard({ mode, property }: Props) {
     e.preventDefault()
     setError(null)
 
-    // Advance through steps; only the final step actually submits.
     if (step < LAST_STEP) {
       const stepError = validateStep(step)
       if (stepError) return setError(stepError)
@@ -163,12 +325,13 @@ export default function PropertyWizard({ mode, property }: Props) {
       return
     }
 
-    const firstBadStep = validateStep(0) ? 0 : validateStep(1) ? 1 : null
+    const firstBadStep = validateStep(0) ? 0 : validateStep(2) ? 2 : null
     if (firstBadStep !== null) {
       setStep(firstBadStep)
       return setError(validateStep(firstBadStep))
     }
 
+    // htag_address_key and htag_address_label are wizard-only — excluded from payload
     const payload: Record<string, unknown> = {
       name: form.name.trim(),
       ...(form.unit.trim() ? { unit: form.unit.trim() } : {}),
@@ -232,8 +395,8 @@ export default function PropertyWizard({ mode, property }: Props) {
         </h1>
         <p className="text-slate-500 mt-1">
           {step === 0 && 'Name it and tell us where it is.'}
-          {step === 1 && 'A few numbers so we can track its performance.'}
-          {step === 2 && 'Loan and insurance details — optional, add them anytime.'}
+          {step === 1 && 'Loan and insurance details — optional, add them anytime.'}
+          {step === 2 && 'A few numbers so we can track its performance.'}
         </p>
       </div>
 
@@ -256,11 +419,11 @@ export default function PropertyWizard({ mode, property }: Props) {
               />
             </Field>
 
-            <Field label="Search address">
+            <Field label="Street" required>
               <AddressAutocomplete
                 value={form.street}
                 onChange={(v) => set('street', v)}
-                onSelect={(f) =>
+                onSelect={(f) => {
                   setForm((prev) => ({
                     ...prev,
                     unit: f.unit,
@@ -268,8 +431,12 @@ export default function PropertyWizard({ mode, property }: Props) {
                     city: f.city,
                     postcode: f.postcode,
                     state: f.state,
+                    htag_address_key: '',
+                    htag_address_label: '',
                   }))
-                }
+                  setHtagConflicts([])
+                  resolveHtagAddress(f)
+                }}
               />
             </Field>
 
@@ -283,7 +450,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                   placeholder="e.g. 12"
                 />
               </Field>
-              <Field label="City">
+              <Field label="City" required>
                 <input
                   type="text"
                   value={form.city}
@@ -295,7 +462,7 @@ export default function PropertyWizard({ mode, property }: Props) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="State">
+              <Field label="State" required>
                 <input
                   type="text"
                   value={form.state}
@@ -304,7 +471,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                   placeholder="e.g. NSW"
                 />
               </Field>
-              <Field label="Postcode">
+              <Field label="Postcode" required>
                 <input
                   type="text"
                   value={form.postcode}
@@ -314,93 +481,58 @@ export default function PropertyWizard({ mode, property }: Props) {
                 />
               </Field>
             </div>
+
+            {htagConflicts.length > 0 && !form.htag_address_key && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-col gap-2">
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                  Multiple matching addresses found — please select one
+                </p>
+                {htagConflicts.map((c) => (
+                  <button
+                    key={c.address_key}
+                    type="button"
+                    onClick={() => {
+                      const addressText = buildAddressText({
+                        unit: form.unit,
+                        street: form.street,
+                        city: form.city,
+                        state: form.state,
+                        postcode: form.postcode,
+                      })
+                      saveHtagAddressKey(addressText, {
+                        address_key: c.address_key,
+                        address_label: c.address_label,
+                        cachedAt: new Date().toISOString(),
+                      })
+                      setForm((prev) => ({
+                        ...prev,
+                        htag_address_key: c.address_key,
+                        htag_address_label: c.address_label,
+                      }))
+                      setHtagConflicts([])
+                    }}
+                    className="flex items-center justify-between rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:bg-amber-50 transition-colors"
+                  >
+                    <span>{c.address_label}</span>
+                    <span className="ml-3 text-xs text-slate-400 shrink-0">Select</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {htagResolving && (
+              <p className="text-xs text-slate-400">Resolving address…</p>
+            )}
+
+            {form.htag_address_key && (
+              <p className="text-xs text-green-700">
+                ✓ Address confirmed: {form.htag_address_label}
+              </p>
+            )}
           </>
         )}
 
         {step === 1 && (
-          <>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Current value ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.current_value}
-                  onChange={(e) => set('current_value', e.target.value)}
-                  className={inputClass}
-                  placeholder="650000"
-                  autoFocus
-                />
-              </Field>
-              <Field label="Current debt ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.current_debt}
-                  onChange={(e) => set('current_debt', e.target.value)}
-                  className={inputClass}
-                  placeholder="420000"
-                />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Monthly rent ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.monthly_rent}
-                  onChange={(e) => set('monthly_rent', e.target.value)}
-                  className={inputClass}
-                  placeholder="0 if vacant"
-                />
-              </Field>
-              <Field label="Monthly repayment ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.monthly_repayment}
-                  onChange={(e) => set('monthly_repayment', e.target.value)}
-                  className={inputClass}
-                  placeholder="2100"
-                />
-              </Field>
-            </div>
-
-            <Field label="Annual expenses ($)" required>
-              <input
-                type="number"
-                min={0}
-                value={form.annual_expenses}
-                onChange={(e) => set('annual_expenses', e.target.value)}
-                className={inputClass}
-                placeholder="6000"
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Purchase price (optional)">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.purchase_price}
-                  onChange={(e) => set('purchase_price', e.target.value)}
-                  className={inputClass}
-                  placeholder="500000"
-                />
-              </Field>
-              <Field label="Purchase date (optional)">
-                <input
-                  type="date"
-                  value={form.purchase_date}
-                  onChange={(e) => set('purchase_date', e.target.value)}
-                  className={inputClass}
-                />
-              </Field>
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
           <>
             <CollapsibleSection
               open={showLoan}
@@ -536,6 +668,113 @@ export default function PropertyWizard({ mode, property }: Props) {
                 Nothing required here — you can finish now and add these later.
               </p>
             )}
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Prefill from data</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Auto-fill estimated value, rent and purchase history
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handlePrefill}
+                disabled={prefillLoading || !form.htag_address_key}
+                className="flex items-center gap-2 rounded-lg bg-green-800 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                <WandSparkles size={14} />
+                {prefillLoading ? 'Fetching…' : 'Prefill'}
+              </button>
+            </div>
+
+            {prefillError && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                {prefillError}
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Current value ($)" required>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.current_value}
+                  onChange={(e) => set('current_value', e.target.value)}
+                  className={inputClass}
+                  placeholder="650000"
+                  autoFocus
+                />
+              </Field>
+              <Field label="Current debt ($)" required>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.current_debt}
+                  onChange={(e) => set('current_debt', e.target.value)}
+                  className={inputClass}
+                  placeholder="420000"
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Monthly rent ($)" required>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.monthly_rent}
+                  onChange={(e) => set('monthly_rent', e.target.value)}
+                  className={inputClass}
+                  placeholder="0 if vacant"
+                />
+              </Field>
+              <Field label="Monthly repayment ($)" required>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.monthly_repayment}
+                  onChange={(e) => set('monthly_repayment', e.target.value)}
+                  className={inputClass}
+                  placeholder="2100"
+                />
+              </Field>
+            </div>
+
+            <Field label="Annual expenses ($)" required>
+              <input
+                type="number"
+                min={0}
+                value={form.annual_expenses}
+                onChange={(e) => set('annual_expenses', e.target.value)}
+                className={inputClass}
+                placeholder="6000"
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Purchase price (optional)">
+                <input
+                  type="number"
+                  min={0}
+                  value={form.purchase_price}
+                  onChange={(e) => set('purchase_price', e.target.value)}
+                  className={inputClass}
+                  placeholder="500000"
+                />
+              </Field>
+              <Field label="Purchase date (optional)">
+                <input
+                  type="date"
+                  value={form.purchase_date}
+                  onChange={(e) => set('purchase_date', e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
           </>
         )}
 
