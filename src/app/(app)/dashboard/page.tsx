@@ -1,16 +1,13 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server-client'
-import { computeRiskScore } from '@/lib/propwatch/engine/computeRiskScore'
-import { computeSensitivity } from '@/lib/propwatch/engine/computeSensitivity'
 import { generateInsights } from '@/lib/propwatch/engine/generateInsights'
 import { computeCapitalGrowth } from '@/lib/propwatch/engine/computeCapitalGrowth'
 import { computeAcquisitionCapacity } from '@/lib/propwatch/engine/computeAcquisitionCapacity'
-import { computeDebtProjection } from '@/lib/propwatch/engine/computeDebtProjection'
 import { computeAfterTaxCashflow } from '@/lib/propwatch/engine/computeAfterTaxCashflow'
 import { computeGoalProgress } from '@/lib/propwatch/engine/computeGoalProgress'
 import { rankProperties } from '@/lib/propwatch/engine/rankProperties'
 import type {
   Property, PortfolioSnapshotInsert, PropertySnapshot,
-  CapitalGrowthSummary, AcquisitionCapacity, PropertyDebtProjection,
+  CapitalGrowthSummary, AcquisitionCapacity,
   AfterTaxCashflow, GoalProgress, PropertyRank, PortfolioHistoryPoint,
 } from '@/lib/propwatch/engine/types'
 import DashboardShell from '@/components/dashboard/DashboardShell'
@@ -44,12 +41,9 @@ export default async function DashboardPage() {
         properties={[]}
         propertySnapshots={{}}
         insights={[]}
-        riskProfile={null}
-        sensitivity={null}
         hasPortfolio={false}
         capitalGrowth={null}
         acquisitionCapacity={null}
-        debtProjections={[]}
         afterTaxCashflow={null}
         goalProgress={null}
         taxBracket={0.325}
@@ -121,17 +115,8 @@ export default async function DashboardPage() {
     metadata: insight.metadata ?? {},
   }))
 
-  const riskProfile = portfolioSnapshot
-    ? computeRiskScore(portfolioSnapshot, properties)
-    : null
-
-  const sensitivity = portfolioSnapshot
-    ? computeSensitivity(portfolioSnapshot, properties)
-    : null
-
   const capitalGrowth: CapitalGrowthSummary = computeCapitalGrowth(properties)
   const acquisitionCapacity: AcquisitionCapacity = computeAcquisitionCapacity(properties)
-  const debtProjections: PropertyDebtProjection[] = computeDebtProjection(properties)
   const taxBracket = (portfolio.income_tax_bracket as number | null) ?? 0.325
   const afterTaxCashflow: AfterTaxCashflow | null = portfolioSnapshot
     ? computeAfterTaxCashflow(portfolioSnapshot, properties, taxBracket)
@@ -148,12 +133,9 @@ export default async function DashboardPage() {
       properties={properties}
       propertySnapshots={propertySnapshots}
       insights={insights}
-      riskProfile={riskProfile}
-      sensitivity={sensitivity}
       hasPortfolio={true}
       capitalGrowth={capitalGrowth}
       acquisitionCapacity={acquisitionCapacity}
-      debtProjections={debtProjections}
       afterTaxCashflow={afterTaxCashflow}
       goalProgress={goalProgress}
       taxBracket={taxBracket}

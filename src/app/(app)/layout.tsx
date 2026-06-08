@@ -1,6 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server-client'
-import Navbar from '@/components/ui/Navbar'
-import Footer from '@/components/ui/Footer'
+import Sidebar from '@/components/ui/Sidebar'
 
 export default async function AppLayout({
   children,
@@ -23,12 +22,11 @@ export default async function AppLayout({
     null
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar displayName={displayName} avatarUrl={avatarUrl} />
-      <main className="flex-1 w-full max-w-3xl mx-auto px-5 py-10">
+    <div className="min-h-screen flex flex-row bg-white">
+      <Sidebar displayName={displayName} avatarUrl={avatarUrl} />
+      <main className="flex-1 overflow-y-auto px-8 py-8 min-h-screen">
         {children}
       </main>
-      <Footer />
     </div>
   )
 }

@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 interface InsightRow {
   id: string
   type: string
@@ -12,23 +14,24 @@ interface InsightRow {
 
 interface Props {
   insights: InsightRow[]
-  onTabChange: (tab: string) => void
 }
 
 const SEVERITY_ORDER: Record<string, number> = { critical: 0, warning: 1, positive: 2, info: 3 }
 
-const ACTION_MAP: Record<string, { label: string; tab: string; bg: string }> = {
-  cashflow_negative: { label: 'Review risk profile', tab: 'risk', bg: 'bg-amber-50 border-amber-200' },
-  cashflow_positive: { label: 'See portfolio', tab: 'portfolio', bg: 'bg-green-50 border-green-200' },
-  lvr_high: { label: 'Review risk profile', tab: 'risk', bg: 'bg-red-50 border-red-200' },
-  lvr_moderate: { label: 'Review risk profile', tab: 'risk', bg: 'bg-amber-50 border-amber-200' },
-  rate_sensitivity: { label: 'Run a scenario', tab: 'scenarios', bg: 'bg-red-50 border-red-200' },
-  concentration_risk: { label: 'See insights', tab: 'insights', bg: 'bg-amber-50 border-amber-200' },
-  gap_all_negative: { label: 'See insights', tab: 'insights', bg: 'bg-amber-50 border-amber-200' },
-  yield_low: { label: 'See insights', tab: 'insights', bg: 'bg-slate-50 border-slate-200' },
+const ACTION_MAP: Record<string, { label: string; href: string; bg: string }> = {
+  cashflow_negative: { label: 'Review risk profile', href: '/risk', bg: 'bg-amber-50 border-amber-200' },
+  cashflow_positive: { label: 'See portfolio', href: '/dashboard', bg: 'bg-green-50 border-green-200' },
+  lvr_high: { label: 'Review risk profile', href: '/risk', bg: 'bg-red-50 border-red-200' },
+  lvr_moderate: { label: 'Review risk profile', href: '/risk', bg: 'bg-amber-50 border-amber-200' },
+  rate_sensitivity: { label: 'Run a scenario', href: '/plan', bg: 'bg-red-50 border-red-200' },
+  concentration_risk: { label: 'See insights', href: '/risk', bg: 'bg-amber-50 border-amber-200' },
+  gap_all_negative: { label: 'See insights', href: '/risk', bg: 'bg-amber-50 border-amber-200' },
+  yield_low: { label: 'See insights', href: '/risk', bg: 'bg-slate-50 border-slate-200' },
 }
 
-export default function ActionHub({ insights, onTabChange }: Props) {
+export default function ActionHub({ insights }: Props) {
+  const router = useRouter()
+
   const topInsights = [...insights]
     .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
     .filter((i) => i.severity === 'critical' || i.severity === 'warning')
@@ -43,7 +46,7 @@ export default function ActionHub({ insights, onTabChange }: Props) {
         {topInsights.map((insight) => {
           const action = ACTION_MAP[insight.type]
           const bg = action?.bg ?? 'bg-slate-50 border-slate-200'
-          const tab = action?.tab ?? 'insights'
+          const href = action?.href ?? '/risk'
           const label = action?.label ?? 'View details'
           return (
             <div
@@ -55,7 +58,7 @@ export default function ActionHub({ insights, onTabChange }: Props) {
                 <p className="text-sm font-medium text-slate-800 truncate">{insight.title}</p>
               </div>
               <button
-                onClick={() => onTabChange(tab)}
+                onClick={() => router.push(href)}
                 className="shrink-0 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap"
               >
                 {label} →

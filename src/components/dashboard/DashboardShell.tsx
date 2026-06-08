@@ -7,11 +7,8 @@ import type {
   Property,
   PortfolioSnapshotInsert,
   PropertySnapshot,
-  RiskProfile,
-  SensitivityResult,
   CapitalGrowthSummary,
   AcquisitionCapacity,
-  PropertyDebtProjection,
   AfterTaxCashflow,
   GoalProgress,
   PropertyRank,
@@ -21,9 +18,6 @@ import ActionHub from "./ActionHub";
 import GoalBanner from "./GoalBanner";
 import PortfolioTab from "./tabs/PortfolioTab";
 import GrowthTab from "./tabs/GrowthTab";
-import RiskTab from "./tabs/RiskTab";
-import InsightsTab from "./tabs/InsightsTab";
-import ScenariosTab from "./tabs/ScenariosTab";
 
 interface InsightRow {
   id: string;
@@ -41,12 +35,9 @@ interface Props {
   properties: Property[];
   propertySnapshots: Record<string, PropertySnapshot>;
   insights: InsightRow[];
-  riskProfile: RiskProfile | null;
-  sensitivity: SensitivityResult | null;
   hasPortfolio: boolean;
   capitalGrowth: CapitalGrowthSummary | null;
   acquisitionCapacity: AcquisitionCapacity | null;
-  debtProjections: PropertyDebtProjection[];
   afterTaxCashflow: AfterTaxCashflow | null;
   goalProgress: GoalProgress | null;
   taxBracket: number;
@@ -54,14 +45,11 @@ interface Props {
   portfolioHistory: PortfolioHistoryPoint[];
 }
 
-type Tab = "portfolio" | "growth" | "risk" | "insights" | "scenarios";
+type Tab = "portfolio" | "growth";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "portfolio", label: "Portfolio" },
   { id: "growth", label: "Growth" },
-  { id: "risk", label: "Risk" },
-  { id: "insights", label: "Insights" },
-  { id: "scenarios", label: "Scenarios" },
 ];
 
 export default function DashboardShell({
@@ -70,12 +58,9 @@ export default function DashboardShell({
   properties,
   propertySnapshots,
   insights,
-  riskProfile,
-  sensitivity,
   hasPortfolio,
   capitalGrowth,
   acquisitionCapacity,
-  debtProjections,
   afterTaxCashflow,
   goalProgress,
   taxBracket,
@@ -95,9 +80,10 @@ export default function DashboardShell({
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-black text-slate-900">
-          Welcome, {displayName}
-        </h1>
+        <div>
+          <h1 className="text-3xl font-black text-slate-900">Portfolio</h1>
+          <p className="text-slate-500 mt-1">Welcome, {displayName}</p>
+        </div>
         <Link
           href="/properties"
           className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
@@ -125,10 +111,7 @@ export default function DashboardShell({
       {!noData && portfolioSnapshot && (
         <>
           {/* Action Hub */}
-          <ActionHub
-            insights={insights}
-            onTabChange={(tab) => setActiveTab(tab as Tab)}
-          />
+          <ActionHub insights={insights} />
 
           {/* Goal Banner */}
           <GoalBanner goalProgress={goalProgress} taxBracket={taxBracket} />
@@ -166,19 +149,6 @@ export default function DashboardShell({
               acquisitionCapacity={acquisitionCapacity}
               portfolioHistory={portfolioHistory}
             />
-          )}
-          {activeTab === "risk" && riskProfile && sensitivity && (
-            <RiskTab
-              riskProfile={riskProfile}
-              sensitivity={sensitivity}
-              portfolioSnapshot={portfolioSnapshot}
-              insights={insights}
-              debtProjections={debtProjections}
-            />
-          )}
-          {activeTab === "insights" && <InsightsTab insights={insights} />}
-          {activeTab === "scenarios" && (
-            <ScenariosTab portfolioSnapshot={portfolioSnapshot} />
           )}
         </>
       )}
