@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { LayoutDashboard, Info } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import type {
   Property,
@@ -18,6 +19,7 @@ import ActionHub from "./ActionHub";
 import GoalBanner from "./GoalBanner";
 import PortfolioTab from "./tabs/PortfolioTab";
 import GrowthTab from "./tabs/GrowthTab";
+import PageHero from "@/components/ui/PageHero";
 
 interface InsightRow {
   id: string;
@@ -79,18 +81,29 @@ export default function DashboardShell({
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900">Portfolio</h1>
-          <p className="text-slate-500 mt-1">Welcome, {displayName}</p>
-        </div>
-        <Link
-          href="/properties"
-          className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
-        >
-          Manage properties →
-        </Link>
-      </div>
+      <PageHero
+        icon={LayoutDashboard}
+        eyebrow="Dashboard"
+        title="Portfolio"
+        description={`Welcome, ${displayName}`}
+        action={
+          <Link
+            href="/properties"
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            Manage properties →
+          </Link>
+        }
+        callout={
+          <>
+            <Info size={15} className="shrink-0 text-slate-400 mt-0.5" />
+            <span>
+              Your numbers are derived from property snapshots. Head to{" "}
+              <strong>Properties</strong> to add or update your portfolio.
+            </span>
+          </>
+        }
+      />
 
       {/* Empty state */}
       {(!hasPortfolio || noData) && (

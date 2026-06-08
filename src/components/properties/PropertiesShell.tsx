@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { Building2, Info } from 'lucide-react'
 import { useToast } from '@/components/ui/ToastProvider'
 import { apiDelete } from '@/lib/propwatch/api/client'
+import PageHero from '@/components/ui/PageHero'
 
 interface PropertyRow {
   id: string
@@ -62,24 +64,39 @@ export default function PropertiesShell({ initialProperties, portfolioId }: Prop
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900">Properties</h1>
-          <p className="text-slate-500 mt-1">
-            {properties.length === 0
-              ? 'No properties yet.'
-              : `${properties.length} propert${properties.length === 1 ? 'y' : 'ies'} in your portfolio`}
-          </p>
-        </div>
-        {portfolioId && (
-          <Link
-            href="/properties/new"
-            className="rounded-xl bg-green-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors shrink-0"
-          >
-            + Add property
-          </Link>
-        )}
-      </div>
+      <PageHero
+        icon={Building2}
+        eyebrow="Portfolio"
+        title="Properties"
+        description={
+          properties.length === 0
+            ? 'No properties yet.'
+            : `${properties.length} propert${properties.length === 1 ? 'y' : 'ies'} in your portfolio`
+        }
+        badge={
+          properties.length > 0
+            ? { label: String(properties.length), className: 'bg-slate-100 text-slate-600' }
+            : undefined
+        }
+        action={
+          portfolioId ? (
+            <Link
+              href="/properties/new"
+              className="rounded-xl bg-green-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors shrink-0"
+            >
+              + Add property
+            </Link>
+          ) : undefined
+        }
+        callout={
+          <>
+            <Info size={15} className="shrink-0 text-slate-400 mt-0.5" />
+            <span>
+              Each property feeds into your portfolio metrics, risk score, and scenario modelling across the app.
+            </span>
+          </>
+        }
+      />
 
       {properties.length === 0 ? (
         <div className="flex flex-col items-center gap-4 py-20 text-center rounded-2xl border border-dashed border-slate-200">

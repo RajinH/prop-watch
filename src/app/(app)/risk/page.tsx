@@ -11,6 +11,8 @@ import type {
 } from '@/lib/propwatch/engine/types'
 import RiskTab from '@/components/dashboard/tabs/RiskTab'
 import InsightsTab from '@/components/dashboard/tabs/InsightsTab'
+import PageHero from '@/components/ui/PageHero'
+import { ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
 
 export const metadata = {
@@ -115,12 +117,33 @@ export default async function RiskPage() {
     metadata: insight.metadata ?? {},
   }))
 
+  const RISK_BADGE: Record<string, string> = {
+    low: 'bg-green-100 text-green-700',
+    moderate: 'bg-amber-100 text-amber-700',
+    high: 'bg-red-100 text-red-700',
+    critical: 'bg-red-200 text-red-800',
+  }
+
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-3xl font-black text-slate-900">Risk</h1>
-        <p className="text-slate-500 mt-1">Your portfolio&apos;s risk exposure, sensitivity, and actionable insights</p>
-      </div>
+      <PageHero
+        icon={ShieldAlert}
+        eyebrow="Analysis"
+        title="Risk"
+        description="Your portfolio's risk exposure, sensitivity, and actionable insights"
+        badge={{
+          label: `${riskProfile.label.charAt(0).toUpperCase()}${riskProfile.label.slice(1)} Risk`,
+          className: RISK_BADGE[riskProfile.label] ?? 'bg-slate-100 text-slate-600',
+        }}
+        callout={
+          <>
+            <ShieldAlert size={15} className="shrink-0 text-slate-400 mt-0.5" />
+            <span>
+              Risk score <strong>{riskProfile.overall}/100</strong> — calculated from LVR, cashflow, interest rate sensitivity, and asset concentration.
+            </span>
+          </>
+        }
+      />
       <RiskTab
         riskProfile={riskProfile}
         sensitivity={sensitivity}

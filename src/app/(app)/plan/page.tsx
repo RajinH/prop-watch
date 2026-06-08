@@ -1,6 +1,8 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import type { PortfolioSnapshotInsert } from '@/lib/propwatch/engine/types'
 import ScenariosTab from '@/components/dashboard/tabs/ScenariosTab'
+import PageHero from '@/components/ui/PageHero'
+import { CalendarCheck, Info } from 'lucide-react'
 import Link from 'next/link'
 
 export const metadata = {
@@ -68,10 +70,20 @@ export default async function PlanPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-3xl font-black text-slate-900">Plan</h1>
-        <p className="text-slate-500 mt-1">Model what-if scenarios to stress-test and shape your next move</p>
-      </div>
+      <PageHero
+        icon={CalendarCheck}
+        eyebrow="Scenarios"
+        title="Plan"
+        description="Model what-if scenarios to stress-test and shape your next move"
+        callout={
+          <>
+            <Info size={15} className="shrink-0 text-slate-400 mt-0.5" />
+            <span>
+              Scenarios run live — adjust the inputs below to model how rate hikes, rent shifts, or market corrections affect your portfolio.
+            </span>
+          </>
+        }
+      />
       <ScenariosTab portfolioSnapshot={portfolioSnapshot} />
     </div>
   )
