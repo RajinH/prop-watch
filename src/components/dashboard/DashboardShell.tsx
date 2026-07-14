@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { LayoutDashboard, Info } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
@@ -8,17 +7,10 @@ import type {
   Property,
   PortfolioSnapshotInsert,
   PropertySnapshot,
-  CapitalGrowthSummary,
-  AcquisitionCapacity,
   AfterTaxCashflow,
-  GoalProgress,
   PropertyRank,
-  PortfolioHistoryPoint,
 } from "@/lib/propwatch/engine/types";
-import ActionHub from "./ActionHub";
-import GoalBanner from "./GoalBanner";
 import PortfolioTab from "./tabs/PortfolioTab";
-import GrowthTab from "./tabs/GrowthTab";
 import PageHero from "@/components/ui/PageHero";
 
 interface InsightRow {
@@ -38,21 +30,9 @@ interface Props {
   propertySnapshots: Record<string, PropertySnapshot>;
   insights: InsightRow[];
   hasPortfolio: boolean;
-  capitalGrowth: CapitalGrowthSummary | null;
-  acquisitionCapacity: AcquisitionCapacity | null;
   afterTaxCashflow: AfterTaxCashflow | null;
-  goalProgress: GoalProgress | null;
-  taxBracket: number;
   rankedProperties: PropertyRank[];
-  portfolioHistory: PortfolioHistoryPoint[];
 }
-
-type Tab = "portfolio" | "growth";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "portfolio", label: "Portfolio" },
-  { id: "growth", label: "Growth" },
-];
 
 export default function DashboardShell({
   user,
@@ -61,16 +41,9 @@ export default function DashboardShell({
   propertySnapshots,
   insights,
   hasPortfolio,
-  capitalGrowth,
-  acquisitionCapacity,
   afterTaxCashflow,
-  goalProgress,
-  taxBracket,
   rankedProperties,
-  portfolioHistory,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("portfolio");
-
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
     user?.email?.split("@")[0] ||
@@ -122,48 +95,14 @@ export default function DashboardShell({
 
       {/* Dashboard content */}
       {!noData && portfolioSnapshot && (
-        <>
-          {/* Action Hub */}
-          <ActionHub insights={insights} />
-
-          {/* Goal Banner */}
-          <GoalBanner goalProgress={goalProgress} taxBracket={taxBracket} />
-
-          {/* Tab bar */}
-          <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab panels */}
-          {activeTab === "portfolio" && (
-            <PortfolioTab
-              portfolioSnapshot={portfolioSnapshot}
-              properties={properties}
-              propertySnapshots={propertySnapshots}
-              afterTaxCashflow={afterTaxCashflow}
-              rankedProperties={rankedProperties}
-            />
-          )}
-          {activeTab === "growth" && capitalGrowth && acquisitionCapacity && (
-            <GrowthTab
-              capitalGrowth={capitalGrowth}
-              acquisitionCapacity={acquisitionCapacity}
-              portfolioHistory={portfolioHistory}
-            />
-          )}
-        </>
+        <PortfolioTab
+          portfolioSnapshot={portfolioSnapshot}
+          properties={properties}
+          propertySnapshots={propertySnapshots}
+          afterTaxCashflow={afterTaxCashflow}
+          rankedProperties={rankedProperties}
+          insights={insights}
+        />
       )}
     </div>
   );

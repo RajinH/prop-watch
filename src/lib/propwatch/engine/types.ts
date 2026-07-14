@@ -182,3 +182,20 @@ export type PortfolioHistoryPoint = {
   weighted_lvr: number | null
   yield: number | null
 }
+
+export type DecisionDimensionKey =
+  | 'performance'
+  | 'leverage'
+  | 'cashflow'
+  | 'concentration'
+  | 'data_quality'
+
+export type DecisionDimension = {
+  key: DecisionDimensionKey
+  label: string
+  status: 'attention' | 'watch'
+  severity: 'critical' | 'warning' | 'info'
+  count: number
+  headline: { title: string; description: string }
+  insightTypes: string[]
+}
