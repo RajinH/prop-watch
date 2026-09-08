@@ -17,8 +17,14 @@ import type {
   PropertyRank,
 } from '@/lib/propwatch/engine/types'
 import { buildDecisionSurface } from '@/lib/propwatch/engine/decisionSurface'
+import type { InvestorGoal, RunChanges } from '@/lib/propwatch/decision/types'
 import DecisionSurface from '@/components/dashboard/DecisionSurface'
 import PortfolioBreakdown from '@/components/dashboard/PortfolioBreakdown'
+import NextBestActionCard from '@/components/decision/NextBestActionCard'
+import AlternativeActionRow from '@/components/decision/AlternativeActionRow'
+import GoalPromptCard from '@/components/decision/GoalPromptCard'
+import DecisionBriefCard from '@/components/decision/DecisionBriefCard'
+import type { RecommendationRow } from '@/components/decision/types'
 
 interface InsightRow {
   id: string
@@ -37,6 +43,9 @@ interface Props {
   afterTaxCashflow: AfterTaxCashflow | null
   rankedProperties: PropertyRank[]
   insights: InsightRow[]
+  goal: InvestorGoal | null
+  recommendations: RecommendationRow[]
+  brief: RunChanges | null
 }
 
 function fmt(n: number) {
@@ -69,6 +78,9 @@ export default function PortfolioTab({
   afterTaxCashflow,
   rankedProperties,
   insights,
+  goal,
+  recommendations,
+  brief,
 }: Props) {
   const lvr = snap.weighted_lvr
   const lvrTone: HealthCard['tone'] =
@@ -138,6 +150,13 @@ export default function PortfolioTab({
 
   const dimensions = buildDecisionSurface(insights)
 
+  // The primary recommendation is rank 1 only when the engine marked it
+  // eligible to lead; blocked/low-confidence actions stay in alternatives.
+  const primary = recommendations.find((rec) => rec.payload?.primary_eligible) ?? null
+  const alternatives = recommendations
+    .filter((rec) => rec.id !== primary?.id)
+    .slice(0, 2)
+
   return (
     <div className="flex flex-col gap-8">
       {/* Section 1 — Portfolio health cards */}
@@ -167,8 +186,20 @@ export default function PortfolioTab({
         })}
       </div>
 
-      {/* Section 2 — Decision surface */}
-      <DecisionSurface dimensions={dimensions} />
+      {/* Section 2 — Decision intelligence: brief, next best action, alternatives */}
+      <DecisionBriefCard changes={brief} />
+      {!goal && <GoalPromptCard />}
+      {primary && <NextBestActionCard key={primary.id} recommendation={primary} />}
+      {alternatives.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            {primary ? 'Alternatives' : 'Actions needing input'}
+          </p>
+          {alternatives.map((rec) => (
+            <AlternativeActionRow key={rec.id} recommendation={rec} />
+          ))}
+        </div>
+      )}
 
       {/* Section 3 — Portfolio breakdown */}
       <PortfolioBreakdown
@@ -177,6 +208,16 @@ export default function PortfolioTab({
         propertySnapshots={propertySnapshots}
         rankedProperties={rankedProperties}
       />
+
+      {/* Section 4 — Supporting signals (demoted decision dimensions) */}
+      {dimensions.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Supporting signals
+          </p>
+          <DecisionSurface dimensions={dimensions} />
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 import { ok, err } from '@/lib/propwatch/api/respond'
+import { rerunDecisionEngineForPortfolio } from '@/lib/propwatch/db/decisionHelpers'
 
 const settingsSchema = z.object({
   passive_income_target: z.number().positive().nullable().optional(),
@@ -36,5 +37,6 @@ export async function PATCH(request: Request) {
   if (!portfolio) return err('No portfolio', 404)
 
   await supabase.from('portfolios').update(parsed.data).eq('id', portfolio.id)
+  await rerunDecisionEngineForPortfolio(supabase, portfolio.id, 'settings_change')
   return ok({ success: true })
 }

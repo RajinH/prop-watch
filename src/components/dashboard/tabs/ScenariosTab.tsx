@@ -1,8 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { apiPost, apiGet } from '@/lib/propwatch/api/client'
-import type { PortfolioSnapshotInsert } from '@/lib/propwatch/engine/types'
+import type {
+  PortfolioSnapshotInsert,
+  ScenarioPropertyOverride,
+} from '@/lib/propwatch/engine/types'
 
 interface ScenarioResult {
   total_value: number
@@ -40,8 +43,15 @@ interface Assumptions {
   valueDeltaPercent: string
 }
 
+export interface ScenarioPreset {
+  label: string
+  propertyOverrides: Record<string, ScenarioPropertyOverride>
+}
+
 interface Props {
   portfolioSnapshot: PortfolioSnapshotInsert
+  // Preconfigured launch from a recommendation ("Model in Plan")
+  initialPreset?: ScenarioPreset | null
 }
 
 type PresetAssumptions = Partial<{
@@ -85,13 +95,16 @@ function DeltaPct({ delta }: { delta: number | null }) {
   )
 }
 
-export default function ScenariosTab({ portfolioSnapshot: snap }: Props) {
+export default function ScenariosTab({ portfolioSnapshot: snap, initialPreset }: Props) {
   const [assumptions, setAssumptions] = useState<Assumptions>({
     interestRateDeltaPercent: '',
     rentDeltaPercent: '',
     expenseDeltaPercent: '',
     valueDeltaPercent: '',
   })
+  const [activePreset, setActivePreset] = useState<ScenarioPreset | null>(
+    initialPreset ?? null
+  )
   const [result, setResult] = useState<{ result: ScenarioResult; delta: ScenarioDelta; insights: ScenarioInsight[] } | null>(null)
   const [running, setRunning] = useState(false)
   const [scenarioName, setScenarioName] = useState('')
@@ -112,6 +125,7 @@ export default function ScenariosTab({ portfolioSnapshot: snap }: Props) {
       expenseDeltaPercent: String(preset.assumptions.expenseDeltaPercent ?? ''),
       valueDeltaPercent: String(preset.assumptions.valueDeltaPercent ?? ''),
     })
+    setActivePreset(null)
     setResult(null)
   }
 
@@ -123,18 +137,21 @@ export default function ScenariosTab({ portfolioSnapshot: snap }: Props) {
       expenseDeltaPercent: String(c.expenseDeltaPercent ?? ''),
       valueDeltaPercent: String(c.valueDeltaPercent ?? ''),
     })
+    setActivePreset(null)
     setResult(null)
   }
 
-  async function runScenario() {
+  const runScenario = useCallback(async (preset?: ScenarioPreset | null) => {
     setError(null)
     setRunning(true)
     try {
-      const body: Record<string, number> = {}
+      const body: Record<string, unknown> = {}
       if (assumptions.interestRateDeltaPercent !== '') body.interestRateDeltaPercent = Number(assumptions.interestRateDeltaPercent)
       if (assumptions.rentDeltaPercent !== '') body.rentDeltaPercent = Number(assumptions.rentDeltaPercent)
       if (assumptions.expenseDeltaPercent !== '') body.expenseDeltaPercent = Number(assumptions.expenseDeltaPercent)
       if (assumptions.valueDeltaPercent !== '') body.valueDeltaPercent = Number(assumptions.valueDeltaPercent)
+      const overrides = preset === undefined ? activePreset : preset
+      if (overrides) body.propertyOverrides = overrides.propertyOverrides
       const data = await apiPost<{ result: ScenarioResult; delta: ScenarioDelta; insights: ScenarioInsight[] }>(
         '/api/scenario/run',
         { assumptions: body }
@@ -145,6 +162,20 @@ export default function ScenariosTab({ portfolioSnapshot: snap }: Props) {
     } finally {
       setRunning(false)
     }
+  }, [assumptions, activePreset])
+
+  // Auto-run once when launched from a recommendation
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (initialPreset && !autoRan.current) {
+      autoRan.current = true
+      runScenario(initialPreset)
+    }
+  }, [initialPreset, runScenario])
+
+  function clearPreset() {
+    setActivePreset(null)
+    setResult(null)
   }
 
   async function saveScenario() {
@@ -173,6 +204,21 @@ export default function ScenariosTab({ portfolioSnapshot: snap }: Props) {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Recommendation preset banner */}
+      {activePreset && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-green-200 bg-green-50/60 px-4 py-3">
+          <p className="text-sm text-slate-700">
+            <span className="font-semibold">Modelling:</span> {activePreset.label}
+          </p>
+          <button
+            onClick={clearPreset}
+            className="shrink-0 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            Clear ✕
+          </button>
+        </div>
+      )}
+
       {/* Presets */}
       <div>
         <p className="text-sm font-semibold text-slate-700 mb-3">Quick presets</p>
@@ -213,7 +259,7 @@ export default function ScenariosTab({ portfolioSnapshot: snap }: Props) {
         </div>
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2">{error}</p>}
         <button
-          onClick={runScenario}
+          onClick={() => runScenario()}
           disabled={running}
           className="w-full rounded-xl bg-green-800 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-60"
         >

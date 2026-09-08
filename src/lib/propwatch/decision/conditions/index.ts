@@ -1,0 +1,1 @@
+export { detectConditions } from './detectors'

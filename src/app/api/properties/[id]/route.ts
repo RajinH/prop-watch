@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { upsertPropertySnapshot, upsertPortfolioSnapshot, refreshInsights } from '@/lib/propwatch/db/snapshotHelpers'
+import { runDecisionEngine } from '@/lib/propwatch/db/decisionHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 import type { Property } from '@/lib/propwatch/engine/types'
@@ -31,6 +32,9 @@ const updatePropertySchema = z
     annual_insurance_premium: z.number().nonnegative().nullable().optional(),
     insurance_policy_type: z.enum(['landlord', 'building', 'contents', 'combined']).nullable().optional(),
     insurance_renewal_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    // Rent review facts
+    comparable_monthly_rent: z.number().nonnegative().nullable().optional(),
+    last_rent_review_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   })
   .refine((obj) => Object.keys(obj).length > 0, { message: 'At least one field is required' })
 
@@ -82,6 +86,13 @@ export async function PATCH(
     portfolioSnap,
     (allProperties ?? []) as Property[]
   )
+  await runDecisionEngine(
+    supabase,
+    existing.portfolio_id,
+    portfolioSnap,
+    (allProperties ?? []) as Property[],
+    'property_write'
+  )
 
   return ok({ property: updated, portfolioSnapshot: portfolioSnap })
 }
@@ -124,6 +135,13 @@ export async function DELETE(
       remainingProps
     )
     await refreshInsights(supabase, existing.portfolio_id, portfolioSnap, remainingProps)
+    await runDecisionEngine(
+      supabase,
+      existing.portfolio_id,
+      portfolioSnap,
+      remainingProps,
+      'property_write'
+    )
     return ok({ success: true, portfolioSnapshot: portfolioSnap })
   } else {
     await supabase

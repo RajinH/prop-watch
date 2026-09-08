@@ -41,7 +41,7 @@ export default async function RiskPage() {
         <div className="flex flex-col items-center gap-4 py-20 text-center rounded-2xl border border-dashed border-slate-200">
           <p className="text-slate-500">No portfolio yet — add a property to see your risk profile.</p>
           <Link
-            href="/onboarding"
+            href="/properties/new"
             className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
           >
             Add your first property →
@@ -92,7 +92,7 @@ export default async function RiskPage() {
         <div className="flex flex-col items-center gap-4 py-20 text-center rounded-2xl border border-dashed border-slate-200">
           <p className="text-slate-500">No data yet — add a property to see your risk profile.</p>
           <Link
-            href="/onboarding"
+            href="/properties/new"
             className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
           >
             Add your first property →

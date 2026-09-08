@@ -1,9 +1,14 @@
 'use client'
 
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine } from 'recharts'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer,
-} from 'recharts'
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
 import type { RiskProfile, SensitivityResult, PortfolioSnapshotInsert, PropertyDebtProjection } from '@/lib/propwatch/engine/types'
 
 interface InsightRow {
@@ -47,10 +52,53 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
 
 const STRESS_TYPES = new Set(['rate_sensitivity', 'lvr_high', 'cashflow_negative', 'lvr_moderate'])
 
-const DEBT_LINE_COLORS = ['#166534', '#15803d', '#16a34a', '#22c55e', '#86efac']
+const DEBT_LINE_COLORS = [
+  'var(--color-chart-1)',
+  'var(--color-chart-2)',
+  'var(--color-chart-3)',
+  'var(--color-chart-4)',
+  'var(--color-chart-5)',
+]
+
+const sensitivityChartConfig = {
+  cashflow: { label: 'Cashflow', color: 'var(--color-chart-1)' },
+} satisfies ChartConfig
+
+function fmtMoney(n: number) {
+  return '$' + Math.round(n).toLocaleString('en-AU')
+}
 
 export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: snap, insights, debtProjections }: Props) {
   const stressInsights = insights.filter((i) => STRESS_TYPES.has(i.type))
+
+  const drawableProjections = debtProjections.filter((d) => d.curve.length > 1)
+
+  // One series per property, keyed by a CSS-safe slug (property names can't be
+  // custom-property names). The slug is the dataKey, so ChartConfig lookups in
+  // both the tooltip and the legend resolve to the human label.
+  const debtSeries = drawableProjections.map((d, i) => ({
+    key: `debt${i}`,
+    name: d.property_name,
+    color: DEBT_LINE_COLORS[i % DEBT_LINE_COLORS.length],
+    curve: d.curve,
+  }))
+
+  const debtChartConfig: ChartConfig = Object.fromEntries(
+    debtSeries.map((s) => [s.key, { label: s.name, color: s.color }])
+  )
+
+  // Recharts needs the series merged into one row-per-year dataset.
+  const debtYears = [...new Set(debtSeries.flatMap((s) => s.curve.map((c) => c.year)))].sort(
+    (a, b) => a - b
+  )
+  const debtChartData = debtYears.map((year) => {
+    const row: Record<string, number> = { year }
+    for (const s of debtSeries) {
+      const point = s.curve.find((c) => c.year === year)
+      if (point) row[s.key] = point.balance
+    }
+    return row
+  })
 
   // Generate sensitivity line chart data (client-side, no API)
   const lineData = Array.from({ length: 11 }, (_, i) => {
@@ -138,16 +186,31 @@ export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: s
       <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <p className="text-sm font-semibold text-slate-700 mb-1">Cashflow vs interest rate</p>
         <p className="text-xs text-slate-400 mb-4">How your monthly cashflow changes as rates rise from current levels</p>
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={lineData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="rate" tick={{ fontSize: 11 }} />
-            <YAxis tickFormatter={(v) => `$${v}`} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v) => [`$${Number(v).toFixed(0)}/mo`, 'Cashflow']} />
-            <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Break-even', position: 'right', fontSize: 10, fill: '#ef4444' }} />
-            <Line type="monotone" dataKey="cashflow" stroke="#166534" strokeWidth={2} dot={false} />
+        <ChartContainer config={sensitivityChartConfig} className="aspect-auto h-[200px] w-full">
+          <LineChart accessibilityLayer data={lineData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="rate" tickLine={false} axisLine={false} tickMargin={8} />
+            <YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(v) => `$${v}`} />
+            <ChartTooltip
+              cursor={false}
+              content={<ChartTooltipContent valueFormatter={(v) => `${fmtMoney(Number(v))}/mo`} />}
+            />
+            <ReferenceLine
+              y={0}
+              stroke="var(--color-chart-negative)"
+              strokeDasharray="4 4"
+              label={{ value: 'Break-even', position: 'right', fontSize: 10, fill: 'var(--color-chart-negative)' }}
+            />
+            <Line
+              type="monotone"
+              dataKey="cashflow"
+              stroke="var(--color-cashflow)"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
           </LineChart>
-        </ResponsiveContainer>
+        </ChartContainer>
       </div>
 
       {/* Stress indicators */}
@@ -164,42 +227,61 @@ export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: s
       )}
 
       {/* Debt paydown projection */}
-      {debtProjections.some((d) => d.curve.length > 1) && (
+      {drawableProjections.length > 0 && (
         <div className="flex flex-col gap-4">
           <div>
             <p className="text-sm font-semibold text-slate-700">Debt paydown projection</p>
             <p className="text-xs text-slate-400 mt-0.5">Projected remaining debt over time based on current repayments</p>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <ChartContainer config={debtChartConfig} className="aspect-auto h-[240px] w-full">
+              <LineChart accessibilityLayer data={debtChartData} margin={{ top: 4, right: 8, bottom: 12, left: 8 }}>
+                <CartesianGrid vertical={false} />
                 <XAxis
                   dataKey="year"
                   type="number"
                   allowDuplicatedCategory={false}
-                  tick={{ fontSize: 10 }}
-                  label={{ value: 'Years from now', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  label={{
+                    value: 'Years from now',
+                    position: 'insideBottom',
+                    offset: -8,
+                    fontSize: 10,
+                    fill: 'var(--color-muted-foreground)',
+                  }}
                 />
-                <YAxis tickFormatter={(v) => '$' + (Number(v) / 1000).toFixed(0) + 'k'} tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(v) => ['$' + Number(v).toLocaleString('en-AU', { maximumFractionDigits: 0 }), 'Balance']} labelFormatter={(l) => `Year ${l}`} />
-                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
-                {debtProjections
-                  .filter((d) => d.curve.length > 1)
-                  .map((d, i) => (
-                    <Line
-                      key={d.property_id}
-                      data={d.curve}
-                      type="monotone"
-                      dataKey="balance"
-                      name={d.property_name}
-                      stroke={DEBT_LINE_COLORS[i % DEBT_LINE_COLORS.length]}
-                      strokeWidth={2}
-                      dot={false}
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(v) => '$' + (Number(v) / 1000).toFixed(0) + 'k'}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(l) => `Year ${l}`}
+                      valueFormatter={(v) => fmtMoney(Number(v))}
                     />
-                  ))}
+                  }
+                />
+                <ChartLegend content={<ChartLegendContent />} />
+                <ReferenceLine y={0} stroke="var(--color-muted-foreground)" strokeDasharray="4 4" />
+                {debtSeries.map((s) => (
+                  <Line
+                    key={s.key}
+                    type="monotone"
+                    dataKey={s.key}
+                    stroke={`var(--color-${s.key})`}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                    connectNulls
+                  />
+                ))}
               </LineChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </div>
           {/* Payoff table */}
           <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">

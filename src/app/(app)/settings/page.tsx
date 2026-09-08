@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import UserInfoCard from '@/components/auth/UserInfoCard'
+import GoalEditor from '@/components/settings/GoalEditor'
 
 export const metadata = {
   title: 'Settings',
@@ -18,6 +19,8 @@ export default async function SettingsPage() {
         <h1 className="text-3xl font-black text-slate-900">Settings</h1>
         <p className="text-slate-500 mt-1">Manage your account.</p>
       </div>
+
+      {user && <GoalEditor />}
 
       {user && <UserInfoCard user={user} session={session} />}
     </div>

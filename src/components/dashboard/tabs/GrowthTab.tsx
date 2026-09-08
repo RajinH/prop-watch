@@ -1,10 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine } from 'recharts'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer,
-} from 'recharts'
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
 import type { CapitalGrowthSummary, AcquisitionCapacity, PortfolioHistoryPoint } from '@/lib/propwatch/engine/types'
 
 interface Props {
@@ -21,6 +24,15 @@ const HISTORY_METRICS: { id: HistoryMetric; label: string; format: (v: number) =
   { id: 'monthly_cashflow', label: 'Cashflow', format: (v) => '$' + Math.round(v).toLocaleString('en-AU') + '/mo' },
   { id: 'yield', label: 'Yield', format: (v) => (v * 100).toFixed(2) + '%' },
 ]
+
+// One series per selectable metric — only the active one is rendered, but naming
+// them all here lets the tooltip resolve a human label for whichever is showing.
+const historyChartConfig = {
+  total_equity: { label: 'Equity', color: 'var(--color-chart-1)' },
+  weighted_lvr: { label: 'LVR', color: 'var(--color-chart-1)' },
+  monthly_cashflow: { label: 'Cashflow', color: 'var(--color-chart-1)' },
+  yield: { label: 'Yield', color: 'var(--color-chart-1)' },
+} satisfies ChartConfig
 
 function fmt(n: number) {
   return '$' + Math.abs(n).toLocaleString('en-AU', { maximumFractionDigits: 0 })
@@ -178,16 +190,43 @@ export default function GrowthTab({ capitalGrowth, acquisitionCapacity, portfoli
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={portfolioHistory} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="snapshot_date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
-              <YAxis tickFormatter={(v) => metric.format(Number(v))} tick={{ fontSize: 10 }} width={60} />
-              <Tooltip formatter={(v) => [metric.format(Number(v)), metric.label]} />
-              {showRefLine && <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />}
-              <Line type="monotone" dataKey={activeMetric} stroke="#166534" strokeWidth={2} dot={false} />
+          <ChartContainer config={historyChartConfig} className="aspect-auto h-[200px] w-full">
+            <LineChart accessibilityLayer data={portfolioHistory} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="snapshot_date"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tickFormatter={(v) => v.slice(5)}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                width={60}
+                tickFormatter={(v) => metric.format(Number(v))}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    valueFormatter={(v) => metric.format(Number(v))}
+                    labelFormatter={(l) => String(l)}
+                  />
+                }
+              />
+              {showRefLine && <ReferenceLine y={0} stroke="var(--color-muted-foreground)" strokeDasharray="4 4" />}
+              <Line
+                type="monotone"
+                dataKey={activeMetric}
+                stroke={`var(--color-${activeMetric})`}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
             </LineChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </div>
       )}
     </div>

@@ -25,10 +25,16 @@ export function runScenario(
     rentDeltaPercent = 0,
     expenseDeltaPercent = 0,
     valueDeltaPercent = 0,
+    propertyOverrides = {},
   } = assumptions
 
-  // Apply assumptions to a mutated copy of each property
-  const adjusted: Property[] = properties.map((p) => ({
+  // Per-property absolute overrides first, then uniform deltas on top
+  const overridden: Property[] = properties.map((p) => {
+    const override = propertyOverrides[p.id]
+    return override ? { ...p, ...override } : p
+  })
+
+  const adjusted: Property[] = overridden.map((p) => ({
     ...p,
     current_value: p.current_value * (1 + valueDeltaPercent / 100),
     monthly_rent: p.monthly_rent * (1 + rentDeltaPercent / 100),

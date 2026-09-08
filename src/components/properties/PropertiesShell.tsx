@@ -42,7 +42,7 @@ interface Props {
   portfolioId: string | null
 }
 
-export default function PropertiesShell({ initialProperties, portfolioId }: Props) {
+export default function PropertiesShell({ initialProperties }: Props) {
   const [properties, setProperties] = useState<PropertyRow[]>(initialProperties)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const { toast } = useToast()
@@ -79,14 +79,12 @@ export default function PropertiesShell({ initialProperties, portfolioId }: Prop
             : undefined
         }
         action={
-          portfolioId ? (
-            <Link
-              href="/properties/new"
-              className="rounded-xl bg-green-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors shrink-0"
-            >
-              + Add property
-            </Link>
-          ) : undefined
+          <Link
+            href="/properties/new"
+            className="rounded-xl bg-green-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors shrink-0"
+          >
+            + Add property
+          </Link>
         }
         callout={
           <>
@@ -101,14 +99,12 @@ export default function PropertiesShell({ initialProperties, portfolioId }: Prop
       {properties.length === 0 ? (
         <div className="flex flex-col items-center gap-4 py-20 text-center rounded-2xl border border-dashed border-slate-200">
           <p className="text-slate-400 text-sm">Add your first property to get started.</p>
-          {portfolioId && (
-            <Link
-              href="/properties/new"
-              className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
-            >
-              Add your first property →
-            </Link>
-          )}
+          <Link
+            href="/properties/new"
+            className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
+          >
+            Add your first property →
+          </Link>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

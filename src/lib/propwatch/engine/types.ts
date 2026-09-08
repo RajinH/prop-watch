@@ -21,6 +21,9 @@ export type Property = {
   annual_insurance_premium: number | null
   insurance_policy_type: 'landlord' | 'building' | 'contents' | 'combined' | null
   insurance_renewal_date: string | null
+  // Rent review facts
+  comparable_monthly_rent: number | null
+  last_rent_review_date: string | null
 }
 
 export type PropertySnapshotInsert = {
@@ -74,11 +77,22 @@ export type SensitivityResult = {
   expense_shock_pct: number | null
 }
 
+export type ScenarioPropertyOverride = {
+  interest_rate?: number
+  monthly_rent?: number
+  current_debt?: number
+  monthly_repayment?: number
+}
+
 export type ScenarioAssumptions = {
   interestRateDeltaPercent?: number
   rentDeltaPercent?: number
   expenseDeltaPercent?: number
   valueDeltaPercent?: number
+  // Absolute per-property overrides (keyed by property id), applied before
+  // the portfolio-wide percentage deltas. Used to model a specific
+  // recommendation (e.g. refinance one loan) rather than a uniform shock.
+  propertyOverrides?: Record<string, ScenarioPropertyOverride>
 }
 
 export type ScenarioResult = {

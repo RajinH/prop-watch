@@ -10,11 +10,15 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   ReferenceLine,
   LabelList,
-  ResponsiveContainer,
 } from 'recharts'
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
 import { ChevronDown, ChevronRight, ArrowRight } from 'lucide-react'
 import type {
   Property,
@@ -59,8 +63,8 @@ const METRICS: { id: Metric; label: string; tooltipLabel: string; caption: strin
   },
 ]
 
-const BAR_COLOR = '#16a34a'
-const BAR_COLOR_NEG = '#dc2626'
+const BAR_COLOR = 'var(--color-chart-2)'
+const BAR_COLOR_NEG = 'var(--color-chart-negative)'
 
 const RANK_BADGES: Record<number, string> = {
   1: 'bg-yellow-100 text-yellow-700 border border-yellow-200',
@@ -126,14 +130,25 @@ export default function PortfolioBreakdown({
   const isExposure = metric === 'exposure'
   const isCashflow = metric === 'cashflow'
 
+  const activeMetric = METRICS.find((m) => m.id === metric)!
+
+  // `fill` is carried on the datum so the tooltip indicator picks up the same
+  // colour as the bar (ChartTooltipContent reads item.payload.fill).
   const chartData = [...rows]
     .sort((a, b) => b[metric] - a[metric])
-    .map((r) => ({
-      name: r.name.length > 20 ? r.name.slice(0, 20) + '…' : r.name,
-      metricValue: isExposure ? r.exposure * 100 : r[metric],
-    }))
+    .map((r) => {
+      const metricValue = isExposure ? r.exposure * 100 : r[metric]
+      return {
+        name: r.name.length > 20 ? r.name.slice(0, 20) + '…' : r.name,
+        metricValue,
+        fill: isCashflow && metricValue < 0 ? BAR_COLOR_NEG : BAR_COLOR,
+      }
+    })
 
-  const activeMetric = METRICS.find((m) => m.id === metric)!
+  const chartConfig = {
+    metricValue: { label: activeMetric.tooltipLabel, color: BAR_COLOR },
+  } satisfies ChartConfig
+
   const formatAxis = (v: number) => (isExposure ? `${v.toFixed(0)}%` : fmt(v))
   const formatTooltip = (v: number) =>
     isExposure ? `${Number(v).toFixed(1)}%` : fmt(Number(v))
@@ -166,44 +181,44 @@ export default function PortfolioBreakdown({
 
       {/* Unified horizontal bar chart */}
       <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <ResponsiveContainer width="100%" height={chartHeight}>
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto w-full"
+          style={{ height: chartHeight }}
+        >
           <BarChart
+            accessibilityLayer
             data={chartData}
             layout="vertical"
             margin={{ top: 18, right: 16, bottom: 4, left: 4 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+            <CartesianGrid horizontal={false} />
             <XAxis
               type="number"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
               tickFormatter={formatAxis}
-              tick={{ fontSize: 11, fill: '#475569' }}
-              stroke="#94a3b8"
             />
             <YAxis type="category" dataKey="name" hide />
-            <Tooltip
-              formatter={(v) => [formatTooltip(Number(v)), activeMetric.tooltipLabel]}
-              cursor={{ fill: '#f8fafc' }}
-              contentStyle={{
-                padding: '5px 9px',
-                borderRadius: 8,
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 1px 3px rgba(15,23,42,0.08)',
-              }}
-              labelStyle={{ fontSize: 11, fontWeight: 600, color: '#334155', marginBottom: 1 }}
-              itemStyle={{ fontSize: 12, padding: 0, color: '#475569' }}
-            />
-            {isCashflow && <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="4 4" />}
-            <Bar dataKey="metricValue" radius={[0, 4, 4, 0]} barSize={18}>
-              {chartData.map((entry, i) => (
-                <Cell
-                  key={i}
-                  fill={isCashflow && entry.metricValue < 0 ? BAR_COLOR_NEG : BAR_COLOR}
+            <ChartTooltip
+              cursor={{ fill: 'var(--color-muted)' }}
+              content={
+                <ChartTooltipContent
+                  valueFormatter={(v) => formatTooltip(Number(v))}
+                  labelFormatter={(_l, payload) => payload?.[0]?.payload?.name ?? ''}
                 />
+              }
+            />
+            {isCashflow && <ReferenceLine x={0} stroke="var(--color-muted-foreground)" strokeDasharray="4 4" />}
+            <Bar dataKey="metricValue" radius={[0, 4, 4, 0]} barSize={18}>
+              {chartData.map((entry) => (
+                <Cell key={entry.name} fill={entry.fill} />
               ))}
               <LabelList dataKey="name" content={<BarNameLabel />} />
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+        </ChartContainer>
       </div>
 
       {/* Expandable detail table */}

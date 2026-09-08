@@ -10,6 +10,8 @@ import type {
   AfterTaxCashflow,
   PropertyRank,
 } from "@/lib/propwatch/engine/types";
+import type { InvestorGoal, RunChanges } from "@/lib/propwatch/decision/types";
+import type { RecommendationRow } from "@/components/decision/types";
 import PortfolioTab from "./tabs/PortfolioTab";
 import PageHero from "@/components/ui/PageHero";
 
@@ -32,6 +34,9 @@ interface Props {
   hasPortfolio: boolean;
   afterTaxCashflow: AfterTaxCashflow | null;
   rankedProperties: PropertyRank[];
+  goal: InvestorGoal | null;
+  recommendations: RecommendationRow[];
+  brief: RunChanges | null;
 }
 
 export default function DashboardShell({
@@ -43,6 +48,9 @@ export default function DashboardShell({
   hasPortfolio,
   afterTaxCashflow,
   rankedProperties,
+  goal,
+  recommendations,
+  brief,
 }: Props) {
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
@@ -85,7 +93,7 @@ export default function DashboardShell({
             No properties yet — add one to unlock your portfolio dashboard.
           </p>
           <Link
-            href="/onboarding"
+            href="/properties/new"
             className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
           >
             Add your first property →
@@ -102,6 +110,9 @@ export default function DashboardShell({
           afterTaxCashflow={afterTaxCashflow}
           rankedProperties={rankedProperties}
           insights={insights}
+          goal={goal}
+          recommendations={recommendations}
+          brief={brief}
         />
       )}
     </div>

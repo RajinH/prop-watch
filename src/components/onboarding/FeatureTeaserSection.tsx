@@ -79,8 +79,8 @@ export default function FeatureTeaserSection({ insights, style }: Props) {
     // Card 2 — Portfolio Resilience (Visx)
     <div key="portfolio" className="flex flex-col gap-3">
       <p className="text-xs text-slate-400 font-medium">Monthly cashflow across your portfolio</p>
-      <div className="flex justify-center">
-        <BarChart data={barData} width={220} height={80} padding={0.35} />
+      <div className="mx-auto w-[220px]">
+        <BarChart data={barData} height={80} padding={0.35} />
       </div>
       <div className="flex justify-center gap-4">
         {[

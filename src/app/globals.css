@@ -5,6 +5,29 @@
   --foreground: #0f172a;
 }
 
+/*
+ * Design tokens consumed by shadcn's chart component (components/ui/chart.tsx).
+ * The --chart-* ramp is the green-forward brand palette; series in a ChartConfig
+ * should reference these rather than hard-coding hex values.
+ */
+@theme inline {
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+
+  --color-chart-1: #166534;
+  --color-chart-2: #16a34a;
+  --color-chart-3: #4ade80;
+  --color-chart-4: #0f766e;
+  --color-chart-5: #a3e635;
+
+  /* Semantic series colours for signed metrics (cashflow, gains). */
+  --color-chart-positive: #16a34a;
+  --color-chart-negative: #dc2626;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

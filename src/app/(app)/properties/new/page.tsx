@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import PropertyWizard from '@/components/properties/PropertyWizard'
 
@@ -11,15 +10,7 @@ export default async function NewPropertyPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: portfolio } = await supabase
-    .from('portfolios')
-    .select('id')
-    .eq('user_id', user.id)
-    .order('created_at')
-    .limit(1)
-    .maybeSingle()
-
-  if (!portfolio) redirect('/properties')
-
+  // No portfolio guard here — POST /api/properties resolves (and creates)
+  // the portfolio lazily, so a first-time user can add their first property.
   return <PropertyWizard mode="create" />
 }

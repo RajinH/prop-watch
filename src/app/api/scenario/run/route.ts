@@ -11,6 +11,17 @@ const scenarioRunSchema = z.object({
     rentDeltaPercent: z.number().min(-50).max(50).optional(),
     expenseDeltaPercent: z.number().min(-50).max(50).optional(),
     valueDeltaPercent: z.number().min(-50).max(50).optional(),
+    propertyOverrides: z
+      .record(
+        z.string(),
+        z.object({
+          interest_rate: z.number().min(0).max(1).optional(),
+          monthly_rent: z.number().nonnegative().optional(),
+          current_debt: z.number().nonnegative().optional(),
+          monthly_repayment: z.number().nonnegative().optional(),
+        })
+      )
+      .optional(),
   }),
 })
 

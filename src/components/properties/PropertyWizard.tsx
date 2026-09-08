@@ -41,6 +41,8 @@ interface PropertyRow {
   annual_insurance_premium: number | null
   insurance_policy_type: string | null
   insurance_renewal_date: string | null
+  comparable_monthly_rent: number | null
+  last_rent_review_date: string | null
   [key: string]: unknown
 }
 
@@ -68,6 +70,8 @@ interface FormState {
   annual_expenses: string
   purchase_price: string
   purchase_date: string
+  comparable_monthly_rent: string
+  last_rent_review_date: string
   // Loan
   lender: string
   interest_rate: string
@@ -126,6 +130,8 @@ export default function PropertyWizard({ mode, property }: Props) {
     annual_expenses: property?.annual_expenses?.toString() ?? '',
     purchase_price: property?.purchase_price?.toString() ?? '',
     purchase_date: property?.purchase_date ?? '',
+    comparable_monthly_rent: property?.comparable_monthly_rent?.toString() ?? '',
+    last_rent_review_date: property?.last_rent_review_date ?? '',
     lender: property?.lender ?? '',
     interest_rate: property?.interest_rate != null ? (property.interest_rate * 100).toString() : '',
     interest_rate_type: property?.interest_rate_type ?? '',
@@ -346,6 +352,12 @@ export default function PropertyWizard({ mode, property }: Props) {
       annual_expenses: Number(form.annual_expenses),
       ...(form.purchase_price ? { purchase_price: Number(form.purchase_price) } : {}),
       ...(form.purchase_date ? { purchase_date: form.purchase_date } : {}),
+      ...(form.comparable_monthly_rent
+        ? { comparable_monthly_rent: Number(form.comparable_monthly_rent) }
+        : {}),
+      ...(form.last_rent_review_date
+        ? { last_rent_review_date: form.last_rent_review_date }
+        : {}),
     }
 
     if (showLoan) {
@@ -754,6 +766,27 @@ export default function PropertyWizard({ mode, property }: Props) {
                 placeholder="6000"
               />
             </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Comparable market rent ($, optional)">
+                <input
+                  type="number"
+                  min={0}
+                  value={form.comparable_monthly_rent}
+                  onChange={(e) => set('comparable_monthly_rent', e.target.value)}
+                  className={inputClass}
+                  placeholder="What similar properties rent for"
+                />
+              </Field>
+              <Field label="Last rent review (optional)">
+                <input
+                  type="date"
+                  value={form.last_rent_review_date}
+                  onChange={(e) => set('last_rent_review_date', e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Purchase price (optional)">

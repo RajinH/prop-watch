@@ -10,6 +10,8 @@ const NULL_LOAN_INSURANCE = {
   loan_term_years: null, lender: null, fixed_rate_expiry: null,
   insurer: null, annual_insurance_premium: null, insurance_policy_type: null,
   insurance_renewal_date: null,
+  comparable_monthly_rent: null,
+  last_rent_review_date: null,
 } as const
 
 const prop1: Property = {
