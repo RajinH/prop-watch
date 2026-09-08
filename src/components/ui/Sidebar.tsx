@@ -67,8 +67,9 @@ export default function Sidebar({ displayName, avatarUrl }: Props) {
 
   return (
     <aside className="w-56 shrink-0 bg-green-950 flex flex-col min-h-screen sticky top-0 h-screen">
-      {/* Logo */}
-      <div className="px-5 h-14 flex items-center border-b border-green-900/60 shrink-0">
+      {/* Brand and account bands share a lighter tone so the chrome reads as a
+          matched pair, with the nav keeping the darker base as its canvas. */}
+      <div className="px-5 h-14 flex items-center border-b border-green-900/60 shrink-0 bg-green-900/30">
         <Link
           href="/dashboard"
           className="text-white font-black text-lg tracking-tight"
@@ -103,7 +104,7 @@ export default function Sidebar({ displayName, avatarUrl }: Props) {
       {/* User account section */}
       <div
         ref={menuRef}
-        className="relative px-3 py-3 border-t border-green-900/60 shrink-0"
+        className="relative px-3 py-3 border-t border-green-900/60 shrink-0 bg-green-900/30"
       >
         <button
           aria-label="Account menu"

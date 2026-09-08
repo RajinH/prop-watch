@@ -13,6 +13,8 @@ const createPropertySchema = z.object({
   city: z.string().max(150).optional(),
   postcode: z.string().max(20).optional(),
   state: z.string().max(100).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
   current_value: z.number().nonnegative(),
   current_debt: z.number().nonnegative(),
   monthly_rent: z.number().nonnegative(),

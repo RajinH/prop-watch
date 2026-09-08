@@ -13,6 +13,8 @@ const updatePropertySchema = z
     city: z.string().max(150).nullable().optional(),
     postcode: z.string().max(20).nullable().optional(),
     state: z.string().max(100).nullable().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
     current_value: z.number().nonnegative().optional(),
     current_debt: z.number().nonnegative().optional(),
     monthly_rent: z.number().nonnegative().optional(),

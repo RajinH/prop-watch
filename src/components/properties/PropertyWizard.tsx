@@ -3,10 +3,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { WandSparkles } from 'lucide-react'
+import { MapPin, WandSparkles } from 'lucide-react'
 import { apiPost, apiPatch, apiGet } from '@/lib/propwatch/api/client'
 import { useToast } from '@/components/ui/ToastProvider'
+import { formatCurrencyShort } from '@/lib/formatters'
 import AddressAutocomplete, { type AddressFields } from './AddressAutocomplete'
+import StaticMap from './StaticMap'
 import {
   loadHtagAddressKey,
   saveHtagAddressKey,
@@ -24,6 +26,8 @@ interface PropertyRow {
   city: string | null
   postcode: string | null
   state: string | null
+  latitude: number | null
+  longitude: number | null
   current_value: number
   current_debt: number
   monthly_rent: number
@@ -59,6 +63,10 @@ interface FormState {
   city: string
   postcode: string
   state: string
+  // Resolved by Checkify on address select — never hand-entered, so kept as
+  // numbers rather than the string form used by the typed money/date fields.
+  latitude: number | null
+  longitude: number | null
   // HTAG resolution (wizard-only, not submitted)
   htag_address_key: string
   htag_address_label: string
@@ -121,6 +129,8 @@ export default function PropertyWizard({ mode, property }: Props) {
     city: property?.city ?? '',
     postcode: property?.postcode ?? '',
     state: property?.state ?? '',
+    latitude: property?.latitude ?? null,
+    longitude: property?.longitude ?? null,
     htag_address_key: '',
     htag_address_label: '',
     current_value: property?.current_value?.toString() ?? '',
@@ -345,6 +355,14 @@ export default function PropertyWizard({ mode, property }: Props) {
       ...(form.city.trim() ? { city: form.city.trim() } : {}),
       ...(form.postcode.trim() ? { postcode: form.postcode.trim() } : {}),
       ...(form.state.trim() ? { state: form.state.trim() } : {}),
+      // On edit, explicitly null cleared coordinates so a retyped address wipes
+      // the old point and lets the backfill resolve the new one; on create
+      // there is nothing to clear, so just omit them.
+      ...(form.latitude != null && form.longitude != null
+        ? { latitude: form.latitude, longitude: form.longitude }
+        : mode === 'edit'
+          ? { latitude: null, longitude: null }
+          : {}),
       current_value: Number(form.current_value),
       current_debt: Number(form.current_debt),
       monthly_rent: Number(form.monthly_rent),
@@ -394,7 +412,7 @@ export default function PropertyWizard({ mode, property }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <div>
         <Link
           href="/properties"
@@ -414,439 +432,522 @@ export default function PropertyWizard({ mode, property }: Props) {
 
       <Stepper step={step} onStepClick={(i) => i < step && goTo(i)} />
 
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col gap-5"
-      >
-        {step === 0 && (
-          <>
-            <Field label="Name" required>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-                className={inputClass}
-                placeholder="e.g. Brighton townhouse"
-                autoFocus
-              />
-            </Field>
-
-            <Field label="Street" required>
-              <AddressAutocomplete
-                value={form.street}
-                onChange={(v) => set('street', v)}
-                onSelect={(f) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    unit: f.unit,
-                    street: f.street,
-                    city: f.city,
-                    postcode: f.postcode,
-                    state: f.state,
-                    htag_address_key: '',
-                    htag_address_label: '',
-                  }))
-                  setHtagConflicts([])
-                  resolveHtagAddress(f)
-                }}
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Unit (optional)">
+      {/* Form stays in a readable column; the map and running summary sit
+          alongside it so they remain visible across all three steps instead of
+          stretching the inputs across the full width of the screen. */}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col gap-5"
+        >
+          {step === 0 && (
+            <>
+              <Field label="Name" required>
                 <input
                   type="text"
-                  value={form.unit}
-                  onChange={(e) => set('unit', e.target.value)}
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
                   className={inputClass}
-                  placeholder="e.g. 12"
-                />
-              </Field>
-              <Field label="City" required>
-                <input
-                  type="text"
-                  value={form.city}
-                  onChange={(e) => set('city', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. Sydney"
-                />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="State" required>
-                <input
-                  type="text"
-                  value={form.state}
-                  onChange={(e) => set('state', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. NSW"
-                />
-              </Field>
-              <Field label="Postcode" required>
-                <input
-                  type="text"
-                  value={form.postcode}
-                  onChange={(e) => set('postcode', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. 2000"
-                />
-              </Field>
-            </div>
-
-            {htagConflicts.length > 0 && !form.htag_address_key && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-col gap-2">
-                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
-                  Multiple matching addresses found — please select one
-                </p>
-                {htagConflicts.map((c) => (
-                  <button
-                    key={c.address_key}
-                    type="button"
-                    onClick={() => {
-                      const addressText = buildAddressText({
-                        unit: form.unit,
-                        street: form.street,
-                        city: form.city,
-                        state: form.state,
-                        postcode: form.postcode,
-                      })
-                      saveHtagAddressKey(addressText, {
-                        address_key: c.address_key,
-                        address_label: c.address_label,
-                        cachedAt: new Date().toISOString(),
-                      })
-                      setForm((prev) => ({
-                        ...prev,
-                        htag_address_key: c.address_key,
-                        htag_address_label: c.address_label,
-                      }))
-                      setHtagConflicts([])
-                    }}
-                    className="flex items-center justify-between rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:bg-amber-50 transition-colors"
-                  >
-                    <span>{c.address_label}</span>
-                    <span className="ml-3 text-xs text-slate-400 shrink-0">Select</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {htagResolving && (
-              <p className="text-xs text-slate-400">Resolving address…</p>
-            )}
-
-            {form.htag_address_key && (
-              <p className="text-xs text-green-700">
-                ✓ Address confirmed: {form.htag_address_label}
-              </p>
-            )}
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <CollapsibleSection
-              open={showLoan}
-              onToggle={() => setShowLoan((v) => !v)}
-              openLabel="Hide loan details"
-              closedLabel="Add loan details"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Lender">
-                  <input
-                    type="text"
-                    value={form.lender}
-                    onChange={(e) => set('lender', e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. ANZ"
-                  />
-                </Field>
-                <Field label="Interest rate (%)">
-                  <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    step={0.01}
-                    value={form.interest_rate}
-                    onChange={(e) => set('interest_rate', e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. 6.5"
-                  />
-                </Field>
-              </div>
-
-              <Field label="Rate type">
-                <RadioGroup
-                  value={form.interest_rate_type}
-                  onChange={(v) => set('interest_rate_type', v)}
-                  options={[
-                    { value: 'variable', label: 'Variable' },
-                    { value: 'fixed', label: 'Fixed' },
-                    { value: 'split', label: 'Split' },
-                  ]}
-                />
-              </Field>
-
-              <Field label="Loan type">
-                <RadioGroup
-                  value={form.loan_type}
-                  onChange={(v) => set('loan_type', v)}
-                  options={[
-                    { value: 'principal_and_interest', label: 'P&I' },
-                    { value: 'interest_only', label: 'Interest only' },
-                  ]}
-                />
-              </Field>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Loan term (years)">
-                  <input
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={form.loan_term_years}
-                    onChange={(e) => set('loan_term_years', e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. 25"
-                  />
-                </Field>
-                {(form.interest_rate_type === 'fixed' || form.interest_rate_type === 'split') && (
-                  <Field label="Fixed rate expiry">
-                    <input
-                      type="date"
-                      value={form.fixed_rate_expiry}
-                      onChange={(e) => set('fixed_rate_expiry', e.target.value)}
-                      className={inputClass}
-                    />
-                  </Field>
-                )}
-              </div>
-            </CollapsibleSection>
-
-            <CollapsibleSection
-              open={showInsurance}
-              onToggle={() => setShowInsurance((v) => !v)}
-              openLabel="Hide insurance details"
-              closedLabel="Add insurance details"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Insurer">
-                  <input
-                    type="text"
-                    value={form.insurer}
-                    onChange={(e) => set('insurer', e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. Suncorp"
-                  />
-                </Field>
-                <Field label="Annual premium ($)">
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.annual_insurance_premium}
-                    onChange={(e) => set('annual_insurance_premium', e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. 1800"
-                  />
-                </Field>
-              </div>
-
-              <Field label="Policy type">
-                <RadioGroup
-                  value={form.insurance_policy_type}
-                  onChange={(v) => set('insurance_policy_type', v)}
-                  options={[
-                    { value: 'landlord', label: 'Landlord' },
-                    { value: 'building', label: 'Building' },
-                    { value: 'contents', label: 'Contents' },
-                    { value: 'combined', label: 'Combined' },
-                  ]}
-                />
-              </Field>
-
-              <Field label="Renewal date">
-                <input
-                  type="date"
-                  value={form.insurance_renewal_date}
-                  onChange={(e) => set('insurance_renewal_date', e.target.value)}
-                  className={inputClass}
-                />
-              </Field>
-            </CollapsibleSection>
-
-            {!showLoan && !showInsurance && (
-              <p className="text-sm text-slate-400 text-center py-2">
-                Nothing required here — you can finish now and add these later.
-              </p>
-            )}
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-700">Prefill from data</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Auto-fill estimated value, rent and purchase history
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handlePrefill}
-                disabled={prefillLoading || !form.htag_address_key}
-                className="flex items-center gap-2 rounded-lg bg-green-800 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                <WandSparkles size={14} />
-                {prefillLoading ? 'Fetching…' : 'Prefill'}
-              </button>
-            </div>
-
-            {prefillError && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
-                {prefillError}
-              </p>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Current value ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.current_value}
-                  onChange={(e) => set('current_value', e.target.value)}
-                  className={inputClass}
-                  placeholder="650000"
+                  placeholder="e.g. Brighton townhouse"
                   autoFocus
                 />
               </Field>
-              <Field label="Current debt ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.current_debt}
-                  onChange={(e) => set('current_debt', e.target.value)}
-                  className={inputClass}
-                  placeholder="420000"
-                />
-              </Field>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Monthly rent ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.monthly_rent}
-                  onChange={(e) => set('monthly_rent', e.target.value)}
-                  className={inputClass}
-                  placeholder="0 if vacant"
+              <Field label="Street" required>
+                <AddressAutocomplete
+                  value={form.street}
+                  onChange={(v) =>
+                    // Typing over the street by hand invalidates any coordinates
+                    // resolved for the previous address — drop them rather than
+                    // pin the map to a place the user has just moved away from.
+                    // Selecting a suggestion below repopulates them.
+                    setForm((prev) => ({
+                      ...prev,
+                      street: v,
+                      latitude: null,
+                      longitude: null,
+                    }))
+                  }
+                  onSelect={(f) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      unit: f.unit,
+                      street: f.street,
+                      city: f.city,
+                      postcode: f.postcode,
+                      state: f.state,
+                      latitude: f.latitude,
+                      longitude: f.longitude,
+                      htag_address_key: '',
+                      htag_address_label: '',
+                    }))
+                    setHtagConflicts([])
+                    resolveHtagAddress(f)
+                  }}
                 />
               </Field>
-              <Field label="Monthly repayment ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.monthly_repayment}
-                  onChange={(e) => set('monthly_repayment', e.target.value)}
-                  className={inputClass}
-                  placeholder="2100"
-                />
-              </Field>
-            </div>
 
-            <Field label="Annual expenses ($)" required>
-              <input
-                type="number"
-                min={0}
-                value={form.annual_expenses}
-                onChange={(e) => set('annual_expenses', e.target.value)}
-                className={inputClass}
-                placeholder="6000"
-              />
-            </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Unit (optional)">
+                  <input
+                    type="text"
+                    value={form.unit}
+                    onChange={(e) => set('unit', e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. 12"
+                  />
+                </Field>
+                <Field label="City" required>
+                  <input
+                    type="text"
+                    value={form.city}
+                    onChange={(e) => set('city', e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. Sydney"
+                  />
+                </Field>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Comparable market rent ($, optional)">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.comparable_monthly_rent}
-                  onChange={(e) => set('comparable_monthly_rent', e.target.value)}
-                  className={inputClass}
-                  placeholder="What similar properties rent for"
-                />
-              </Field>
-              <Field label="Last rent review (optional)">
-                <input
-                  type="date"
-                  value={form.last_rent_review_date}
-                  onChange={(e) => set('last_rent_review_date', e.target.value)}
-                  className={inputClass}
-                />
-              </Field>
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="State" required>
+                  <input
+                    type="text"
+                    value={form.state}
+                    onChange={(e) => set('state', e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. NSW"
+                  />
+                </Field>
+                <Field label="Postcode" required>
+                  <input
+                    type="text"
+                    value={form.postcode}
+                    onChange={(e) => set('postcode', e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. 2000"
+                  />
+                </Field>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Purchase price (optional)">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.purchase_price}
-                  onChange={(e) => set('purchase_price', e.target.value)}
-                  className={inputClass}
-                  placeholder="500000"
-                />
-              </Field>
-              <Field label="Purchase date (optional)">
-                <input
-                  type="date"
-                  value={form.purchase_date}
-                  onChange={(e) => set('purchase_date', e.target.value)}
-                  className={inputClass}
-                />
-              </Field>
-            </div>
-          </>
-        )}
+              {htagConflicts.length > 0 && !form.htag_address_key && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-col gap-2">
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                    Multiple matching addresses found — please select one
+                  </p>
+                  {htagConflicts.map((c) => (
+                    <button
+                      key={c.address_key}
+                      type="button"
+                      onClick={() => {
+                        const addressText = buildAddressText({
+                          unit: form.unit,
+                          street: form.street,
+                          city: form.city,
+                          state: form.state,
+                          postcode: form.postcode,
+                        })
+                        saveHtagAddressKey(addressText, {
+                          address_key: c.address_key,
+                          address_label: c.address_label,
+                          cachedAt: new Date().toISOString(),
+                        })
+                        setForm((prev) => ({
+                          ...prev,
+                          htag_address_key: c.address_key,
+                          htag_address_label: c.address_label,
+                        }))
+                        setHtagConflicts([])
+                      }}
+                      className="flex items-center justify-between rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:bg-amber-50 transition-colors"
+                    >
+                      <span>{c.address_label}</span>
+                      <span className="ml-3 text-xs text-slate-400 shrink-0">Select</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-        {error && (
-          <p className="text-sm text-red-600 rounded-xl bg-red-50 px-4 py-2">{error}</p>
-        )}
+              {htagResolving && (
+                <p className="text-xs text-slate-400">Resolving address…</p>
+              )}
 
-        <div className="flex gap-3 pt-1">
-          {step === 0 ? (
-            <Link
-              href="/properties"
-              className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              Cancel
-            </Link>
-          ) : (
-            <button
-              type="button"
-              onClick={goBack}
-              className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              ← Back
-            </button>
+              {form.htag_address_key && (
+                <p className="text-xs text-green-700">
+                  ✓ Address confirmed: {form.htag_address_label}
+                </p>
+              )}
+            </>
           )}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex-1 rounded-xl bg-green-800 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-60"
-          >
-            {step < LAST_STEP
-              ? 'Continue →'
-              : submitting
-                ? 'Saving…'
-                : mode === 'create'
-                  ? 'Add property'
-                  : 'Save changes'}
-          </button>
-        </div>
-      </form>
+
+          {step === 1 && (
+            <>
+              <CollapsibleSection
+                open={showLoan}
+                onToggle={() => setShowLoan((v) => !v)}
+                openLabel="Hide loan details"
+                closedLabel="Add loan details"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Lender">
+                    <input
+                      type="text"
+                      value={form.lender}
+                      onChange={(e) => set('lender', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. ANZ"
+                    />
+                  </Field>
+                  <Field label="Interest rate (%)">
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      step={0.01}
+                      value={form.interest_rate}
+                      onChange={(e) => set('interest_rate', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 6.5"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Rate type">
+                  <RadioGroup
+                    value={form.interest_rate_type}
+                    onChange={(v) => set('interest_rate_type', v)}
+                    options={[
+                      { value: 'variable', label: 'Variable' },
+                      { value: 'fixed', label: 'Fixed' },
+                      { value: 'split', label: 'Split' },
+                    ]}
+                  />
+                </Field>
+
+                <Field label="Loan type">
+                  <RadioGroup
+                    value={form.loan_type}
+                    onChange={(v) => set('loan_type', v)}
+                    options={[
+                      { value: 'principal_and_interest', label: 'P&I' },
+                      { value: 'interest_only', label: 'Interest only' },
+                    ]}
+                  />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Loan term (years)">
+                    <input
+                      type="number"
+                      min={1}
+                      max={40}
+                      value={form.loan_term_years}
+                      onChange={(e) => set('loan_term_years', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 25"
+                    />
+                  </Field>
+                  {(form.interest_rate_type === 'fixed' || form.interest_rate_type === 'split') && (
+                    <Field label="Fixed rate expiry">
+                      <input
+                        type="date"
+                        value={form.fixed_rate_expiry}
+                        onChange={(e) => set('fixed_rate_expiry', e.target.value)}
+                        className={inputClass}
+                      />
+                    </Field>
+                  )}
+                </div>
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                open={showInsurance}
+                onToggle={() => setShowInsurance((v) => !v)}
+                openLabel="Hide insurance details"
+                closedLabel="Add insurance details"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Insurer">
+                    <input
+                      type="text"
+                      value={form.insurer}
+                      onChange={(e) => set('insurer', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. Suncorp"
+                    />
+                  </Field>
+                  <Field label="Annual premium ($)">
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.annual_insurance_premium}
+                      onChange={(e) => set('annual_insurance_premium', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 1800"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Policy type">
+                  <RadioGroup
+                    value={form.insurance_policy_type}
+                    onChange={(v) => set('insurance_policy_type', v)}
+                    options={[
+                      { value: 'landlord', label: 'Landlord' },
+                      { value: 'building', label: 'Building' },
+                      { value: 'contents', label: 'Contents' },
+                      { value: 'combined', label: 'Combined' },
+                    ]}
+                  />
+                </Field>
+
+                <Field label="Renewal date">
+                  <input
+                    type="date"
+                    value={form.insurance_renewal_date}
+                    onChange={(e) => set('insurance_renewal_date', e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              </CollapsibleSection>
+
+              {!showLoan && !showInsurance && (
+                <p className="text-sm text-slate-400 text-center py-2">
+                  Nothing required here — you can finish now and add these later.
+                </p>
+              )}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Prefill from data</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Auto-fill estimated value, rent and purchase history
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePrefill}
+                  disabled={prefillLoading || !form.htag_address_key}
+                  className="flex items-center gap-2 rounded-lg bg-green-800 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  <WandSparkles size={14} />
+                  {prefillLoading ? 'Fetching…' : 'Prefill'}
+                </button>
+              </div>
+
+              {prefillError && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                  {prefillError}
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Current value ($)" required>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.current_value}
+                    onChange={(e) => set('current_value', e.target.value)}
+                    className={inputClass}
+                    placeholder="650000"
+                    autoFocus
+                  />
+                </Field>
+                <Field label="Current debt ($)" required>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.current_debt}
+                    onChange={(e) => set('current_debt', e.target.value)}
+                    className={inputClass}
+                    placeholder="420000"
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Monthly rent ($)" required>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.monthly_rent}
+                    onChange={(e) => set('monthly_rent', e.target.value)}
+                    className={inputClass}
+                    placeholder="0 if vacant"
+                  />
+                </Field>
+                <Field label="Monthly repayment ($)" required>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.monthly_repayment}
+                    onChange={(e) => set('monthly_repayment', e.target.value)}
+                    className={inputClass}
+                    placeholder="2100"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Annual expenses ($)" required>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.annual_expenses}
+                  onChange={(e) => set('annual_expenses', e.target.value)}
+                  className={inputClass}
+                  placeholder="6000"
+                />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Comparable market rent ($, optional)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.comparable_monthly_rent}
+                    onChange={(e) => set('comparable_monthly_rent', e.target.value)}
+                    className={inputClass}
+                    placeholder="What similar properties rent for"
+                  />
+                </Field>
+                <Field label="Last rent review (optional)">
+                  <input
+                    type="date"
+                    value={form.last_rent_review_date}
+                    onChange={(e) => set('last_rent_review_date', e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Purchase price (optional)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.purchase_price}
+                    onChange={(e) => set('purchase_price', e.target.value)}
+                    className={inputClass}
+                    placeholder="500000"
+                  />
+                </Field>
+                <Field label="Purchase date (optional)">
+                  <input
+                    type="date"
+                    value={form.purchase_date}
+                    onChange={(e) => set('purchase_date', e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+            </>
+          )}
+
+          {error && (
+            <p className="text-sm text-red-600 rounded-xl bg-red-50 px-4 py-2">{error}</p>
+          )}
+
+          {/* Actions sit at their natural width against a divider rather than
+              stretching edge to edge, so the primary action reads as one button
+              instead of half the form's width. */}
+          <div className="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-5">
+            {step === 0 ? (
+              <Link
+                href="/properties"
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-center text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={goBack}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                ← Back
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-xl bg-green-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-60"
+            >
+              {step < LAST_STEP
+                ? 'Continue →'
+                : submitting
+                  ? 'Saving…'
+                  : mode === 'create'
+                    ? 'Add property'
+                    : 'Save changes'}
+            </button>
+          </div>
+        </form>
+
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-8">
+          {form.latitude != null && form.longitude != null ? (
+            <StaticMap
+              latitude={form.latitude}
+              longitude={form.longitude}
+              label={form.street || 'the selected address'}
+              className="h-44 w-full rounded-2xl border border-slate-200"
+            />
+          ) : (
+            <div className="flex h-44 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
+              <MapPin size={18} className="text-slate-300" />
+              <p className="text-xs text-slate-400">
+                Choose an address suggestion and its location appears here.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Summary
+            </p>
+            <SummaryRow label="Name" value={form.name.trim()} />
+            <SummaryRow
+              label="Address"
+              value={[
+                [form.unit.trim(), form.street.trim()].filter(Boolean).join('/'),
+                [form.city.trim(), form.state.trim(), form.postcode.trim()]
+                  .filter(Boolean)
+                  .join(' '),
+              ]
+                .filter(Boolean)
+                .join(', ')}
+            />
+            <SummaryRow label="Value" value={formatMoneyField(form.current_value)} />
+            <SummaryRow
+              label="Rent"
+              value={
+                formatMoneyField(form.monthly_rent) === '—'
+                  ? '—'
+                  : `${formatMoneyField(form.monthly_rent)}/mo`
+              }
+            />
+          </div>
+        </aside>
+      </div>
+    </div>
+  )
+}
+
+/** Money fields are held as raw strings while typing; show them only once valid. */
+function formatMoneyField(raw: string): string {
+  const n = Number(raw)
+  return raw.trim() === '' || !Number.isFinite(n) ? '—' : formatCurrencyShort(n)
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="shrink-0 text-xs text-slate-400">{label}</span>
+      <span className="truncate text-right text-sm font-medium text-slate-700">
+        {value || '—'}
+      </span>
     </div>
   )
 }

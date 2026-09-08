@@ -2,6 +2,10 @@ export type Property = {
   id: string
   portfolio_id: string
   name: string
+  // Display-only: rendered on the property map, never read by engine maths.
+  // Optional so engine fixtures aren't forced to carry presentation fields.
+  latitude?: number | null
+  longitude?: number | null
   current_value: number
   current_debt: number
   monthly_rent: number
