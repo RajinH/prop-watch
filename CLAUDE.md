@@ -228,6 +228,11 @@ non-`NEXT_PUBLIC_` env vars.
   `/api/htag/property-estimates`. Responses are cached in localStorage with a 30-day TTL
   (`storage.ts`) to limit billable calls.
 
+> **Before working with HTAG, read `docs/htag-integration.md`.** It records measured
+> pricing (which differs from the published rates), the per-endpoint free allowance,
+> several parameter gotchas that return 400 or silently truncate, and which endpoints
+> are worth the call. It will save you money and a debugging session.
+
 Never move these keys to `NEXT_PUBLIC_`, and never import `*/server.ts` from a client
 component.
 

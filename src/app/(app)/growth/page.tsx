@@ -49,9 +49,13 @@ export default async function GrowthPage() {
 
   if (!portfolio) return emptyState
 
-  const twelveMonthsAgo = new Date()
-  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
-  const sinceDate = twelveMonthsAgo.toISOString().slice(0, 10)
+  // Matches the 60-month cap on /api/portfolio/history. A 12-month window hid
+  // every reconstructed snapshot older than a year, which looked like the
+  // history was simply missing.
+  const HISTORY_MONTHS = 60
+  const historyStart = new Date()
+  historyStart.setMonth(historyStart.getMonth() - HISTORY_MONTHS)
+  const sinceDate = historyStart.toISOString().slice(0, 10)
 
   const [{ data: portfolioSnapRow }, { data: propertiesRaw }, { data: historyRaw }] =
     await Promise.all([

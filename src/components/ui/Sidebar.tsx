@@ -10,6 +10,7 @@ import {
   Building2,
   ShieldAlert,
   CalendarCheck,
+  Globe2,
   Settings,
   LogOut,
   ChevronUp,
@@ -23,6 +24,7 @@ interface Props {
 const NAV_LINKS = [
   { label: "Portfolio", href: "/dashboard", icon: LayoutDashboard },
   { label: "Properties", href: "/properties", icon: Building2 },
+  { label: "Market", href: "/market", icon: Globe2 },
   { label: "Risk", href: "/risk", icon: ShieldAlert },
   { label: "Plan", href: "/plan", icon: CalendarCheck },
 ];

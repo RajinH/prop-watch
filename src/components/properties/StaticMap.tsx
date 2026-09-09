@@ -10,6 +10,12 @@ interface Props {
   label: string
   /** Tile zoom. Defaults to the portfolio-safe level; raise for a larger map. */
   zoom?: number
+  /**
+   * Hide the marker for an area-level view. A pin asserts "this exact spot",
+   * which is wrong when the map is standing in for a whole suburb rather than
+   * one dwelling.
+   */
+  showMarker?: boolean
   className?: string
 }
 
@@ -76,6 +82,7 @@ export default function StaticMap({
   longitude,
   label,
   zoom = DEFAULT_ZOOM,
+  showMarker = true,
   className,
 }: Props) {
   const mosaic = buildMosaic(latitude, longitude, zoom)
@@ -115,7 +122,7 @@ export default function StaticMap({
           parks, water and road hierarchy that make a location recognisable. */}
       <div className="absolute inset-0 bg-slate-500/5 mix-blend-multiply" aria-hidden />
 
-      <Marker />
+      {showMarker && <Marker />}
 
       <span className="sr-only">Map showing the location of {label}</span>
 

@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { formatCurrencyShort } from '@/lib/formatters'
 import AddressAutocomplete, { type AddressFields } from './AddressAutocomplete'
 import StaticMap from './StaticMap'
+import { resolveAddressMatch, type HtagAddressCandidate } from '@/lib/propwatch/htag/matchAddress'
 import {
   loadHtagAddressKey,
   saveHtagAddressKey,
@@ -94,11 +95,7 @@ interface FormState {
   insurance_renewal_date: string
 }
 
-interface HtagCandidate {
-  address_key: string
-  address_label: string
-  score: number
-}
+type HtagCandidate = HtagAddressCandidate
 
 const STEPS = ['Property', 'Loan & Insurance', 'Financials'] as const
 const LAST_STEP = STEPS.length - 1
@@ -213,22 +210,26 @@ export default function PropertyWizard({ mode, property }: Props) {
       const results = data.results ?? []
       if (results.length === 0) return
 
-      const best = results[0]
-      const clearWinner =
-        best.score >= 0.8 &&
-        (results.length === 1 || best.score - results[1].score >= 0.1)
+      // Matched on the structured address fields rather than on `score`: HTAG
+      // returns score: null for every candidate, so the old `score >= 0.8` test
+      // could never pass and every address fell through to manual disambiguation.
+      const match = resolveAddressMatch(results, {
+        street: fields.street,
+        city: fields.city,
+        postcode: fields.postcode,
+      })
 
-      if (clearWinner) {
+      if (match) {
         const entry = {
-          address_key: best.address_key,
-          address_label: best.address_label,
+          address_key: match.address_key,
+          address_label: match.address_label,
           cachedAt: new Date().toISOString(),
         }
         saveHtagAddressKey(addressText, entry)
         setForm((prev) => ({
           ...prev,
-          htag_address_key: best.address_key,
-          htag_address_label: best.address_label,
+          htag_address_key: match.address_key,
+          htag_address_label: match.address_label,
         }))
         setHtagConflicts([])
       } else {

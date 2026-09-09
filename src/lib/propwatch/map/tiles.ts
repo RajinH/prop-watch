@@ -29,6 +29,13 @@ export const TILE_SIZE = 256
 export const DEFAULT_ZOOM = 16
 
 /**
+ * Area-level zoom: wide enough to read a whole suburb and its surroundings —
+ * coastline, parks, arterial roads — rather than individual streets. Used where
+ * the map represents a market rather than a dwelling.
+ */
+export const SUBURB_ZOOM = 12
+
+/**
  * Tile endpoint, overridable so a paid/self-hosted provider can be dropped in
  * without touching component code. openstreetmap.org's tiles are a donated
  * service — fine at this scale with attribution, but its usage policy rules out
