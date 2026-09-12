@@ -86,6 +86,14 @@ mix it with a Dashboard endpoint's secret — they verify different events.
 Checkout flow variants (trial/no-trial, monthly/annual, card-upfront or not)
 live in `src/lib/propwatch/stripe/flows.ts`; `/pricing?flow=<key>` pins one.
 
+To exercise the whole subscription lifecycle in about a minute rather than a
+month (trialing → active → past_due → canceled), with the dev server running
+and `stripe listen` forwarding:
+
+```bash
+node scripts/stripe-lifecycle-test.mjs --user=<supabase-user-uuid>
+```
+
 #### Access codes
 
 Comp codes let beta users bypass the paywall without a Stripe subscription.
