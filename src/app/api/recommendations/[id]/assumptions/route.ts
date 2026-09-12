@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { rerunDecisionEngineForPortfolio } from '@/lib/propwatch/db/decisionHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 
 const overridesSchema = z.object({
   overrides: z.record(z.string(), z.union([z.number(), z.boolean()])),
@@ -19,8 +19,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const { id } = await params
   const body = await request.json()

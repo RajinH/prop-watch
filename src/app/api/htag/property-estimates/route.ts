@@ -1,10 +1,11 @@
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import { htagPropertyEstimates } from '@/lib/propwatch/htag/server'
 
 export async function GET(request: Request) {
-  const { user } = await getSupabaseWithUser(request)
+  const { user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const address_key = new URL(request.url).searchParams.get('address_key')?.trim() ?? ''
   if (!address_key) return err('address_key is required', 400)

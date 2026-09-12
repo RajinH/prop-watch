@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { rerunDecisionEngineForPortfolio } from '@/lib/propwatch/db/decisionHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 
 const goalSchema = z.object({
   type: z.enum(['improve_cashflow', 'prepare_next_purchase', 'reduce_debt', 'reduce_risk']),
@@ -15,8 +15,9 @@ const goalSchema = z.object({
 })
 
 export async function GET(request: Request) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const portfolio = await resolvePortfolio(supabase, user.id)
   if (!portfolio) return err('Failed to resolve portfolio', 500)
@@ -31,8 +32,9 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const body = await request.json()
   const parsed = goalSchema.safeParse(body)
@@ -62,8 +64,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const portfolio = await resolvePortfolio(supabase, user.id)
   if (!portfolio) return err('Failed to resolve portfolio', 500)

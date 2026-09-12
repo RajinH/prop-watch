@@ -1,10 +1,11 @@
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import { checkifyAutocompleteDetails, type CheckifyCountry } from '@/lib/propwatch/checkify/server'
 
 export async function GET(request: Request) {
-  const { user } = await getSupabaseWithUser(request)
+  const { user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const searchParams = new URL(request.url).searchParams
   const id = (searchParams.get('id') ?? '').trim()

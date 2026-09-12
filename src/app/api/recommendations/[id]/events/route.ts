@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 
 // Client-emitted analytics pings only — engine and status events are
 // written server-side by their own routes.
@@ -13,8 +13,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const { id } = await params
   const body = await request.json()

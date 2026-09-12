@@ -51,7 +51,28 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-anon-key
 # Server-only (never exposed to the browser)
 HTAG_API_KEY=your-htag-key           # property price/rent estimates
 CHECKIFY_API_KEY=your-checkify-key   # AU/NZ address autocomplete
+
+# Billing / paywall — all server-only
+STRIPE_SECRET_KEY=rk_test_...        # Stripe sandbox key
+STRIPE_WEBHOOK_SECRET=whsec_...      # from `stripe listen --print-secret`
+SUPABASE_SECRET_KEY=sb_secret_...    # bypasses RLS; Stripe webhook only
+ACCESS_CODE_PEPPER=...               # peppers the HMAC of access codes at rest
 ```
+
+#### Access codes
+
+Comp codes let beta users bypass the paywall without a Stripe subscription.
+Mint them with:
+
+```bash
+node scripts/mint-access-code.mjs --label="beta cohort 1" --days=90 --uses=25
+node scripts/mint-access-code.mjs --label="founder" --days=forever --count=5
+```
+
+Codes are printed once and stored only as an HMAC, so a lost code can be
+revoked and reissued but never recovered. `ACCESS_CODE_PEPPER` must not change
+once codes exist — rotating it invalidates every outstanding code (hence the
+`pepper_version` column, which exists so a future rotation can dual-verify).
 
 ### Database
 

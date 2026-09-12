@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { runScenario } from '@/lib/propwatch/engine/runScenario'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import type { Property, PortfolioSnapshotInsert } from '@/lib/propwatch/engine/types'
 
 const scenarioRunSchema = z.object({
@@ -26,8 +26,9 @@ const scenarioRunSchema = z.object({
 })
 
 export async function POST(request: Request) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const body = await request.json()
   const parsed = scenarioRunSchema.safeParse(body)
