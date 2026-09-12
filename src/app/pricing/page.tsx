@@ -3,7 +3,10 @@ import { redirect } from 'next/navigation'
 import { Check } from 'lucide-react'
 import { createSupabaseServerClient } from '@/lib/supabase/server-client'
 import { getAccess } from '@/lib/propwatch/access/getAccess'
+import { isStripeConfigured } from '@/lib/propwatch/stripe/server'
+import { FLOWS, DEFAULT_FLOWS, isFlowKey } from '@/lib/propwatch/stripe/flows'
 import RedeemCodeForm from '@/components/billing/RedeemCodeForm'
+import CheckoutButtons from '@/components/billing/CheckoutButtons'
 
 export const metadata = { title: 'Pricing' }
 
@@ -16,7 +19,11 @@ const FEATURES = [
   'Suburb-level market comparison',
 ]
 
-export default async function PricingPage() {
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ flow?: string }>
+}) {
   const supabase = await createSupabaseServerClient()
   const {
     data: { user },
@@ -28,6 +35,12 @@ export default async function PricingPage() {
     if (access.hasAccess) redirect('/dashboard')
   }
 
+  // ?flow=<key> pins a single variant, which is how payment journeys get
+  // compared; without it the default pair is shown.
+  const { flow } = await searchParams
+  const flows =
+    flow && isFlowKey(flow) ? [FLOWS[flow]] : DEFAULT_FLOWS.map((k) => FLOWS[k])
+
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-16">
       <header>
@@ -38,9 +51,7 @@ export default async function PricingPage() {
       </header>
 
       <section className="mt-8 rounded-2xl border border-green-200 bg-white p-6 shadow-sm">
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-black text-slate-900">PropWatch Pro</span>
-        </div>
+        <span className="text-3xl font-black text-slate-900">PropWatch Pro</span>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
           {FEATURES.map((f) => (
             <li key={f} className="flex items-start gap-2 text-sm text-slate-600">
@@ -50,10 +61,13 @@ export default async function PricingPage() {
           ))}
         </ul>
 
-        <div className="mt-6 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Checkout isn&apos;t wired up yet — subscription plans land once Stripe is
-          configured. Use an access code in the meantime.
-        </div>
+        {isStripeConfigured() ? (
+          <CheckoutButtons flows={flows} />
+        ) : (
+          <div className="mt-6 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Billing isn&apos;t configured on this environment. Use an access code below.
+          </div>
+        )}
       </section>
 
       <div className="mt-6">

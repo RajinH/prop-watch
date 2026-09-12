@@ -59,6 +59,33 @@ SUPABASE_SECRET_KEY=sb_secret_...    # bypasses RLS; Stripe webhook only
 ACCESS_CODE_PEPPER=...               # peppers the HMAC of access codes at rest
 ```
 
+#### Stripe
+
+One-time setup, idempotent and re-runnable (it is also how live mode gets
+configured later, with a live key):
+
+```bash
+node scripts/stripe-setup.mjs            # product, AUD prices, customer portal
+node scripts/stripe-setup.mjs --reprice --monthly=3900
+```
+
+Prices are resolved at runtime by `lookup_key`, so `--reprice` moves the key to
+a new Price: new signups get the new amount with no deploy, and existing
+subscribers keep what they signed up at.
+
+For local webhooks:
+
+```bash
+npm install -g @stripe/cli && stripe login
+stripe listen --forward-to localhost:3000/api/billing/webhook
+```
+
+`stripe listen` prints the `whsec_...` to put in `STRIPE_WEBHOOK_SECRET`. Don't
+mix it with a Dashboard endpoint's secret — they verify different events.
+
+Checkout flow variants (trial/no-trial, monthly/annual, card-upfront or not)
+live in `src/lib/propwatch/stripe/flows.ts`; `/pricing?flow=<key>` pins one.
+
 #### Access codes
 
 Comp codes let beta users bypass the paywall without a Stripe subscription.

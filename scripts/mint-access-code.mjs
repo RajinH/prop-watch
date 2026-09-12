@@ -11,24 +11,13 @@
  * Inserts directly when SUPABASE_SECRET_KEY is set; otherwise prints the SQL so
  * you can run it against whichever database you meant.
  */
-import { readFileSync } from 'node:fs'
 import { createHmac, randomBytes } from 'node:crypto'
+import { loadEnv, arg } from './_env.mjs'
 
 // Mirrors src/lib/propwatch/access/codes.ts. Kept in sync by hand: this script
 // is not bundled, so it can't import from src/ without a build step.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 const CODE_LENGTH = 13
-
-function loadEnv(file = '.env.local') {
-  try {
-    for (const line of readFileSync(file, 'utf8').split('\n')) {
-      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim()
-    }
-  } catch {
-    /* no .env.local — rely on the ambient environment */
-  }
-}
 
 function generate() {
   const bytes = randomBytes(CODE_LENGTH)
@@ -42,11 +31,6 @@ const normalise = (s) =>
 
 const hash = (code, pepper) =>
   createHmac('sha256', pepper).update(normalise(code)).digest('hex')
-
-const arg = (name, fallback) => {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
-  return hit ? hit.slice(name.length + 3) : fallback
-}
 
 loadEnv()
 
