@@ -1,29 +1,19 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { LayoutDashboard, Info } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import type {
   Property,
   PortfolioSnapshotInsert,
   PropertySnapshot,
-  RiskProfile,
-  SensitivityResult,
-  CapitalGrowthSummary,
-  AcquisitionCapacity,
-  PropertyDebtProjection,
   AfterTaxCashflow,
-  GoalProgress,
   PropertyRank,
-  PortfolioHistoryPoint,
 } from "@/lib/propwatch/engine/types";
-import ActionHub from "./ActionHub";
-import GoalBanner from "./GoalBanner";
+import type { InvestorGoal, RunChanges } from "@/lib/propwatch/decision/types";
+import type { RecommendationRow } from "@/components/decision/types";
 import PortfolioTab from "./tabs/PortfolioTab";
-import GrowthTab from "./tabs/GrowthTab";
-import RiskTab from "./tabs/RiskTab";
-import InsightsTab from "./tabs/InsightsTab";
-import ScenariosTab from "./tabs/ScenariosTab";
+import PageHero from "@/components/ui/PageHero";
 
 interface InsightRow {
   id: string;
@@ -41,28 +31,13 @@ interface Props {
   properties: Property[];
   propertySnapshots: Record<string, PropertySnapshot>;
   insights: InsightRow[];
-  riskProfile: RiskProfile | null;
-  sensitivity: SensitivityResult | null;
   hasPortfolio: boolean;
-  capitalGrowth: CapitalGrowthSummary | null;
-  acquisitionCapacity: AcquisitionCapacity | null;
-  debtProjections: PropertyDebtProjection[];
   afterTaxCashflow: AfterTaxCashflow | null;
-  goalProgress: GoalProgress | null;
-  taxBracket: number;
   rankedProperties: PropertyRank[];
-  portfolioHistory: PortfolioHistoryPoint[];
+  goal: InvestorGoal | null;
+  recommendations: RecommendationRow[];
+  brief: RunChanges | null;
 }
-
-type Tab = "portfolio" | "growth" | "risk" | "insights" | "scenarios";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "portfolio", label: "Portfolio" },
-  { id: "growth", label: "Growth" },
-  { id: "risk", label: "Risk" },
-  { id: "insights", label: "Insights" },
-  { id: "scenarios", label: "Scenarios" },
-];
 
 export default function DashboardShell({
   user,
@@ -70,20 +45,13 @@ export default function DashboardShell({
   properties,
   propertySnapshots,
   insights,
-  riskProfile,
-  sensitivity,
   hasPortfolio,
-  capitalGrowth,
-  acquisitionCapacity,
-  debtProjections,
   afterTaxCashflow,
-  goalProgress,
-  taxBracket,
   rankedProperties,
-  portfolioHistory,
+  goal,
+  recommendations,
+  brief,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("portfolio");
-
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
     user?.email?.split("@")[0] ||
@@ -94,17 +62,29 @@ export default function DashboardShell({
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-black text-slate-900">
-          Welcome, {displayName}
-        </h1>
-        <Link
-          href="/properties"
-          className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
-        >
-          Manage properties →
-        </Link>
-      </div>
+      <PageHero
+        icon={LayoutDashboard}
+        eyebrow="Dashboard"
+        title="Portfolio"
+        description={`Welcome, ${displayName}`}
+        action={
+          <Link
+            href="/properties"
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            Manage properties →
+          </Link>
+        }
+        callout={
+          <>
+            <Info size={15} className="shrink-0 text-slate-400 mt-0.5" />
+            <span>
+              Your numbers are derived from property snapshots. Head to{" "}
+              <strong>Properties</strong> to add or update your portfolio.
+            </span>
+          </>
+        }
+      />
 
       {/* Empty state */}
       {(!hasPortfolio || noData) && (
@@ -113,7 +93,7 @@ export default function DashboardShell({
             No properties yet — add one to unlock your portfolio dashboard.
           </p>
           <Link
-            href="/onboarding"
+            href="/properties/new"
             className="rounded-xl bg-green-800 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
           >
             Add your first property →
@@ -123,64 +103,17 @@ export default function DashboardShell({
 
       {/* Dashboard content */}
       {!noData && portfolioSnapshot && (
-        <>
-          {/* Action Hub */}
-          <ActionHub
-            insights={insights}
-            onTabChange={(tab) => setActiveTab(tab as Tab)}
-          />
-
-          {/* Goal Banner */}
-          <GoalBanner goalProgress={goalProgress} taxBracket={taxBracket} />
-
-          {/* Tab bar */}
-          <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab panels */}
-          {activeTab === "portfolio" && (
-            <PortfolioTab
-              portfolioSnapshot={portfolioSnapshot}
-              properties={properties}
-              propertySnapshots={propertySnapshots}
-              afterTaxCashflow={afterTaxCashflow}
-              rankedProperties={rankedProperties}
-            />
-          )}
-          {activeTab === "growth" && capitalGrowth && acquisitionCapacity && (
-            <GrowthTab
-              capitalGrowth={capitalGrowth}
-              acquisitionCapacity={acquisitionCapacity}
-              portfolioHistory={portfolioHistory}
-            />
-          )}
-          {activeTab === "risk" && riskProfile && sensitivity && (
-            <RiskTab
-              riskProfile={riskProfile}
-              sensitivity={sensitivity}
-              portfolioSnapshot={portfolioSnapshot}
-              insights={insights}
-              debtProjections={debtProjections}
-            />
-          )}
-          {activeTab === "insights" && <InsightsTab insights={insights} />}
-          {activeTab === "scenarios" && (
-            <ScenariosTab portfolioSnapshot={portfolioSnapshot} />
-          )}
-        </>
+        <PortfolioTab
+          portfolioSnapshot={portfolioSnapshot}
+          properties={properties}
+          propertySnapshots={propertySnapshots}
+          afterTaxCashflow={afterTaxCashflow}
+          rankedProperties={rankedProperties}
+          insights={insights}
+          goal={goal}
+          recommendations={recommendations}
+          brief={brief}
+        />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { z } from 'zod'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import { ok, err } from '@/lib/propwatch/api/respond'
+import { rerunDecisionEngineForPortfolio } from '@/lib/propwatch/db/decisionHelpers'
 
 const settingsSchema = z.object({
   passive_income_target: z.number().positive().nullable().optional(),
@@ -8,8 +9,9 @@ const settingsSchema = z.object({
 })
 
 export async function GET(request: Request) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const { data } = await supabase
     .from('portfolios')
@@ -23,8 +25,9 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const body = await request.json()
   const parsed = settingsSchema.safeParse(body)
@@ -36,5 +39,6 @@ export async function PATCH(request: Request) {
   if (!portfolio) return err('No portfolio', 404)
 
   await supabase.from('portfolios').update(parsed.data).eq('id', portfolio.id)
+  await rerunDecisionEngineForPortfolio(supabase, portfolio.id, 'settings_change')
   return ok({ success: true })
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Red_Hat_Display } from "next/font/google";
 import { ToastProvider } from "@/components/ui/ToastProvider";
+import { THEME_INIT_SCRIPT } from "@/components/ui/ThemeToggle";
 import "./globals.css";
 
 const redHatDisplay = Red_Hat_Display({
@@ -44,7 +45,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${redHatDisplay.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${redHatDisplay.variable} h-full antialiased`}
+      // The init script sets data-theme before React hydrates, so the server
+      // markup (which has no theme) will not match. That mismatch is the point.
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body
         className="min-h-full"
         style={{

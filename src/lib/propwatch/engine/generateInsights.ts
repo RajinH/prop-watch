@@ -3,6 +3,12 @@ import { computeSensitivity } from './computeSensitivity'
 import { computePropertySnapshot } from './computePropertySnapshot'
 import { computeCapitalGrowth } from './computeCapitalGrowth'
 import { computeAcquisitionCapacity } from './computeAcquisitionCapacity'
+import {
+  RATE_FLAG_THRESHOLD,
+  FIXED_EXPIRY_WINDOW_DAYS,
+  HIGH_LVR_THRESHOLD,
+  TARGET_GROSS_YIELD,
+} from './thresholds'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -40,7 +46,7 @@ export function generateInsights(
 
   // Rule 3 & 4: LVR (mutually exclusive — only fire the higher severity)
   if (snapshot.weighted_lvr !== null) {
-    if (snapshot.weighted_lvr >= 0.8) {
+    if (snapshot.weighted_lvr >= HIGH_LVR_THRESHOLD) {
       insights.push({
         portfolio_id: portfolioId,
         type: 'lvr_high',
@@ -64,7 +70,7 @@ export function generateInsights(
   }
 
   // Rule 5: low yield
-  if (snapshot.yield !== null && snapshot.yield < 0.035) {
+  if (snapshot.yield !== null && snapshot.yield < TARGET_GROSS_YIELD) {
     insights.push({
       portfolio_id: portfolioId,
       type: 'yield_low',
@@ -191,7 +197,7 @@ export function generateInsights(
     if (property.fixed_rate_expiry) {
       const expiryMs = new Date(property.fixed_rate_expiry).setHours(0, 0, 0, 0)
       const daysUntilExpiry = Math.round((expiryMs - todayMs) / 86_400_000)
-      if (daysUntilExpiry <= 90) {
+      if (daysUntilExpiry <= FIXED_EXPIRY_WINDOW_DAYS) {
         insights.push({
           portfolio_id: portfolioId,
           property_id: property.id,
@@ -206,7 +212,7 @@ export function generateInsights(
     }
 
     // Rule 12: interest rate above market (>7%)
-    if (property.interest_rate !== null && property.interest_rate > 0.07) {
+    if (property.interest_rate !== null && property.interest_rate > RATE_FLAG_THRESHOLD) {
       insights.push({
         portfolio_id: portfolioId,
         property_id: property.id,

@@ -10,6 +10,8 @@ const NULL_LOAN_INSURANCE = {
   loan_term_years: null, lender: null, fixed_rate_expiry: null,
   insurer: null, annual_insurance_premium: null, insurance_policy_type: null,
   insurance_renewal_date: null,
+  comparable_monthly_rent: null,
+  last_rent_review_date: null,
 } as const
 
 const baseProperties: Property[] = [
@@ -122,5 +124,39 @@ describe('runScenario', () => {
     // new value: 700000, debt: 600000, LVR: 0.857
     const types = insights.map((i) => i.type)
     expect(types).toContain('scenario_lvr_breach')
+  })
+
+  it('applies propertyOverrides to the targeted property only', () => {
+    const { result, delta } = runScenario(baselineSnap, baseProperties, {
+      propertyOverrides: { 'prop-1': { monthly_rent: 2800, monthly_repayment: 1600 } },
+    })
+    // prop-1: +300 rent, -200 repayment → +500/month; prop-2 untouched
+    expect(delta.monthly_cashflow).toBe(500)
+    expect(result.total_value).toBe(baselineSnap.total_value)
+  })
+
+  it('applies propertyOverrides to debt before LVR is computed', () => {
+    const { result } = runScenario(baselineSnap, baseProperties, {
+      propertyOverrides: { 'prop-1': { current_debt: 300000 } },
+    })
+    // debt: 300000 + 200000 = 500000 over 1000000
+    expect(result.total_debt).toBe(500000)
+    expect(result.weighted_lvr).toBe(0.5)
+  })
+
+  it('combines propertyOverrides with uniform percentage deltas', () => {
+    const { delta } = runScenario(baselineSnap, baseProperties, {
+      rentDeltaPercent: 10,
+      propertyOverrides: { 'prop-1': { monthly_rent: 3000 } },
+    })
+    // overridden rents: 3000 + 1800 = 4800; +10% → 5280 vs baseline 4300 → +980
+    expect(delta.monthly_cashflow).toBeCloseTo(980, 0)
+  })
+
+  it('ignores overrides for unknown property ids', () => {
+    const { delta } = runScenario(baselineSnap, baseProperties, {
+      propertyOverrides: { 'missing-prop': { monthly_rent: 9999 } },
+    })
+    expect(delta.monthly_cashflow).toBe(0)
   })
 })

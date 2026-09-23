@@ -10,9 +10,10 @@ function today(): string {
 
 export async function upsertPropertySnapshot(
   supabase: SupabaseClient,
-  property: Property
+  property: Property,
+  snapshotDate: string = today()
 ): Promise<void> {
-  const snap: PropertySnapshotInsert = computePropertySnapshot(property, today())
+  const snap: PropertySnapshotInsert = computePropertySnapshot(property, snapshotDate)
   await supabase
     .from('property_snapshots')
     .upsert(snap, { onConflict: 'property_id,snapshot_date' })
@@ -21,15 +22,26 @@ export async function upsertPropertySnapshot(
 export async function upsertPortfolioSnapshot(
   supabase: SupabaseClient,
   portfolioId: string,
-  properties: Property[]
+  properties: Property[],
+  snapshotDate: string = today()
 ): Promise<PortfolioSnapshotInsert> {
-  const snap = computePortfolioSnapshot(portfolioId, properties, today())
+  const snap = computePortfolioSnapshot(portfolioId, properties, snapshotDate)
   await supabase
     .from('portfolio_snapshots')
     .upsert(snap, { onConflict: 'portfolio_id,snapshot_date' })
   return snap
 }
 
+/**
+ * Regenerates the portfolio's active insights.
+ *
+ * Portfolio-wide and NOT date-scoped: it deletes every active insight before
+ * reinserting, so it must never be called from a back-dated write path — doing
+ * so would replace the user's current insights with ones derived from a
+ * historical snapshot. `runDecisionEngine` carries the same hazard and is worse,
+ * since recommendations hold user state (status, outcomes, events) reconciled
+ * against "now".
+ */
 export async function refreshInsights(
   supabase: SupabaseClient,
   portfolioId: string,

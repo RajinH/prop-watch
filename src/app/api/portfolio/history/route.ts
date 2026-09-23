@@ -1,9 +1,10 @@
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import { ok, err } from '@/lib/propwatch/api/respond'
 
 export async function GET(request: Request) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const { data: portfolio } = await supabase
     .from('portfolios').select('id').eq('user_id', user.id)

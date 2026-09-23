@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { upsertPropertySnapshot, upsertPortfolioSnapshot, refreshInsights } from '@/lib/propwatch/db/snapshotHelpers'
+import { runDecisionEngine } from '@/lib/propwatch/db/decisionHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
-import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import type { Property } from '@/lib/propwatch/engine/types'
 
 const updatePropertySchema = z
@@ -12,6 +13,11 @@ const updatePropertySchema = z
     city: z.string().max(150).nullable().optional(),
     postcode: z.string().max(20).nullable().optional(),
     state: z.string().max(100).nullable().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
+    // HTAG join keys; null clears them when the address changes
+    htag_address_key: z.string().max(200).nullable().optional(),
+    htag_loc_pid: z.string().max(50).nullable().optional(),
     current_value: z.number().nonnegative().optional(),
     current_debt: z.number().nonnegative().optional(),
     monthly_rent: z.number().nonnegative().optional(),
@@ -31,6 +37,9 @@ const updatePropertySchema = z
     annual_insurance_premium: z.number().nonnegative().nullable().optional(),
     insurance_policy_type: z.enum(['landlord', 'building', 'contents', 'combined']).nullable().optional(),
     insurance_renewal_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    // Rent review facts
+    comparable_monthly_rent: z.number().nonnegative().nullable().optional(),
+    last_rent_review_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   })
   .refine((obj) => Object.keys(obj).length > 0, { message: 'At least one field is required' })
 
@@ -38,8 +47,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const { id } = await params
 
@@ -82,6 +92,13 @@ export async function PATCH(
     portfolioSnap,
     (allProperties ?? []) as Property[]
   )
+  await runDecisionEngine(
+    supabase,
+    existing.portfolio_id,
+    portfolioSnap,
+    (allProperties ?? []) as Property[],
+    'property_write'
+  )
 
   return ok({ property: updated, portfolioSnapshot: portfolioSnap })
 }
@@ -90,8 +107,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { supabase, user } = await getSupabaseWithUser(request)
+  const { supabase, user, access } = await getSupabaseWithPaidUser(request)
   if (!user) return err('Unauthorized', 401)
+  if (!access.hasAccess) return err('Subscription required', 402)
 
   const { id } = await params
 
@@ -124,6 +142,13 @@ export async function DELETE(
       remainingProps
     )
     await refreshInsights(supabase, existing.portfolio_id, portfolioSnap, remainingProps)
+    await runDecisionEngine(
+      supabase,
+      existing.portfolio_id,
+      portfolioSnap,
+      remainingProps,
+      'property_write'
+    )
     return ok({ success: true, portfolioSnapshot: portfolioSnap })
   } else {
     await supabase

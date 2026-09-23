@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser-client'
 import { useToast } from '@/components/ui/ToastProvider'
-import { GearIcon, ExitIcon } from '@radix-ui/react-icons'
+import { Settings, LogOut } from 'lucide-react'
 
 interface Props {
   displayName: string
@@ -111,14 +111,14 @@ export default function Navbar({ displayName, avatarUrl }: Props) {
               onClick={() => setOpen(false)}
               className="px-4 py-2 text-sm text-green-900 hover:bg-green-50 transition-colors flex items-center gap-2.5"
             >
-              <GearIcon className="shrink-0 text-green-700" />
+              <Settings size={14} className="shrink-0 text-green-700" />
               Settings
             </Link>
             <button
               onClick={handleSignOut}
               className="px-4 py-2 text-sm text-green-900 hover:bg-green-50 transition-colors text-left flex items-center gap-2.5"
             >
-              <ExitIcon className="shrink-0 text-green-700" />
+              <LogOut size={14} className="shrink-0 text-green-700" />
               Sign out
             </button>
           </div>

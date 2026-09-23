@@ -10,6 +10,8 @@ interface CheckifyAddressDetails {
   postcode: string | null
   state: string | null
   region: string | null
+  latitude: number | null
+  longitude: number | null
 }
 
 export interface AddressFields {
@@ -18,6 +20,9 @@ export interface AddressFields {
   city: string
   postcode: string
   state: string
+  /** Checkify resolves coordinates alongside the address; null when it can't. */
+  latitude: number | null
+  longitude: number | null
 }
 
 interface Props {
@@ -131,6 +136,8 @@ export default function AddressAutocomplete({ value, onChange, onSelect }: Props
         city: d.city ?? '',
         postcode: d.postcode ?? '',
         state: d.state ?? d.region ?? '',
+        latitude: d.latitude,
+        longitude: d.longitude,
       })
     } catch {
       // Fall back to the plain suggestion text in the street field.

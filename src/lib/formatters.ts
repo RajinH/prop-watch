@@ -25,3 +25,8 @@ export function formatPercent(value: number, decimals = 1): string {
 export function formatLVR(lvr: number): string {
   return `${lvr.toFixed(1)}% LVR`
 }
+
+/** Unsigned dollars without the currency suffix, e.g. "$1,500" (for inline arithmetic). */
+export function formatDollars(value: number, maxDecimals = 0): string {
+  return `$${Math.abs(value).toLocaleString('en-AU', { maximumFractionDigits: maxDecimals })}`
+}

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { resolvePortfolio } from '@/lib/propwatch/db/resolvePortfolio'
 import { upsertPropertySnapshot, upsertPortfolioSnapshot, refreshInsights } from '@/lib/propwatch/db/snapshotHelpers'
+import { runDecisionEngine } from '@/lib/propwatch/db/decisionHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 import type { Property } from '@/lib/propwatch/engine/types'
@@ -12,6 +13,11 @@ const createPropertySchema = z.object({
   city: z.string().max(150).optional(),
   postcode: z.string().max(20).optional(),
   state: z.string().max(100).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  // HTAG join keys, resolved by the wizard's address match
+  htag_address_key: z.string().max(200).optional(),
+  htag_loc_pid: z.string().max(50).optional(),
   current_value: z.number().nonnegative(),
   current_debt: z.number().nonnegative(),
   monthly_rent: z.number().nonnegative(),
@@ -31,6 +37,9 @@ const createPropertySchema = z.object({
   annual_insurance_premium: z.number().nonnegative().optional(),
   insurance_policy_type: z.enum(['landlord', 'building', 'contents', 'combined']).optional(),
   insurance_renewal_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Rent review facts
+  comparable_monthly_rent: z.number().nonnegative().optional(),
+  last_rent_review_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 export async function POST(request: Request) {
@@ -70,6 +79,13 @@ export async function POST(request: Request) {
     (allProperties ?? []) as Property[]
   )
   await refreshInsights(supabase, portfolio.id, portfolioSnap, (allProperties ?? []) as Property[])
+  await runDecisionEngine(
+    supabase,
+    portfolio.id,
+    portfolioSnap,
+    (allProperties ?? []) as Property[],
+    'property_write'
+  )
 
   return ok({ property, portfolioSnapshot: portfolioSnap }, 201)
 }

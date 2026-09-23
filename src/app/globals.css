@@ -3,6 +3,194 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+
+  /*
+   * App chrome. Plain custom properties, not @theme tokens: `@theme inline`
+   * bakes its values straight into the utility and omits the variable, so a
+   * token declared there can never be overridden by a theme scope. Anything
+   * that has to change between light and dark lives here and is used as
+   * `bg-[var(--surface-rail)]`.
+   */
+  --surface-rail: #f4faf6;
+  --surface-rail-border: #dde8e0;
+}
+
+/*
+ * Dark theme.
+ *
+ * Every Tailwind colour utility compiles to `var(--color-*)`, so re-pointing
+ * the ramp re-themes all ~1,185 colour utilities in the app at once — no
+ * `dark:` variant on any component.
+ *
+ * The trick that makes it work: white and the brand greens inverting in
+ * lockstep. `green-700` is used 48x as ink and 38x as a button fill, and
+ * `white` is both the card surface (77x) and the button label (56x). Lighten
+ * the greens and darken white together and BOTH readings stay correct —
+ * positive money is bright green on a dark card, and a button becomes bright
+ * green with a near-black label. Re-stepping either one alone breaks the other.
+ *
+ * Contrast on the card surface (#14181e): muted ink 5.66:1, body ink 9.89:1,
+ * positive 10.01:1, negative 6.17:1, caution 10.34:1, button label 10.01:1.
+ */
+[data-theme="dark"] {
+  --background: #0b0d11;
+  --foreground: #f7f9fc;
+
+  --surface-rail: #12161c;
+  --surface-rail-border: #262c36;
+
+  /* Surfaces. `white` is the card, so it darkens; `text-white` rides along. */
+  --color-white: #14181e;
+  --color-slate-50: #1a1f27;
+  --color-slate-100: #222831;
+  --color-slate-200: #2d3440;
+  --color-slate-300: #3b4350;
+  --color-slate-400: #8792a3;
+  --color-slate-500: #9ca7b8;
+  --color-slate-600: #b8c2d0;
+  --color-slate-700: #d2dae4;
+  --color-slate-800: #e6ebf2;
+  --color-slate-900: #f7f9fc;
+  --color-slate-950: #ffffff;
+
+  /* Brand + status: deep steps become bright, tint steps become deep. */
+  --color-green-50: #0c2115;
+  --color-green-100: #0f2c1b;
+  --color-green-200: #17402a;
+  --color-green-300: #1d5636;
+  --color-green-600: #00e06a;
+  --color-green-700: #05df72;
+  --color-green-800: #00c950;
+  --color-green-900: #00a63e;
+  --color-green-950: #008236;
+
+  --color-red-50: #2a1015;
+  --color-red-100: #33131a;
+  --color-red-200: #4a1a23;
+  --color-red-500: #ff6467;
+  --color-red-600: #ff6467;
+  --color-red-700: #ff8a8c;
+  --color-red-800: #ffabac;
+  --color-red-900: #ffc9ca;
+
+  --color-amber-50: #271a08;
+  --color-amber-100: #31210a;
+  --color-amber-400: #ffb900;
+  --color-amber-500: #ffb900;
+  --color-amber-600: #ffb900;
+  --color-amber-700: #ffc933;
+  --color-amber-800: #ffd966;
+  --color-amber-900: #ffe699;
+
+  --color-yellow-100: #31210a;
+  --color-yellow-400: #ffb900;
+  --color-yellow-600: #ffc933;
+  --color-yellow-700: #ffd966;
+
+  --color-orange-50: #2a1608;
+  --color-orange-100: #351c0a;
+  --color-orange-400: #ff8904;
+  --color-orange-500: #ff8904;
+  --color-orange-600: #ff8904;
+  --color-orange-800: #ffb066;
+
+  /*
+   * Chart series, re-stepped for the dark surface rather than flipped.
+   * Validated at surface #14181e: worst adjacent CVD dE 15.5, normal-vision
+   * dE 24.9, all six >= 3:1.
+   */
+  --color-series-1: #00a63e;
+  --color-series-2: #0084d1;
+  --color-series-3: #f54900;
+  --color-series-4: #2b7fff;
+  --color-series-5: #f6339a;
+  --color-series-6: #8e51ff;
+
+  --color-seq-1: #00e06a;
+  --color-seq-2: #00c950;
+  --color-seq-3: #00a63e;
+  --color-seq-4: #008236;
+
+  --color-status-good: #05df72;
+  --color-status-warning: #ffb900;
+  --color-status-critical: #ff6467;
+  --color-chart-positive: #05df72;
+  --color-chart-negative: #ff6467;
+
+  --color-muted: #222831;
+  --color-muted-foreground: #8792a3;
+  --color-border: #2d3440;
+  --color-background: #14181e;
+  --color-foreground: #f7f9fc;
+}
+
+/*
+ * Design tokens consumed by shadcn's chart component (components/ui/chart.tsx).
+ * A ChartConfig references these rather than hard-coding hex values.
+ *
+ * Colour here does one of four jobs, and each job has its own set — the old
+ * single --chart-* ramp was being used for all of them at once, which is why a
+ * five-suburb market chart was five near-identical greens.
+ */
+@theme inline {
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+
+  /*
+   * CATEGORICAL — series identity (one hue per suburb, per property).
+   * Fixed order, assigned in sequence, never cycled: a 7th series folds into
+   * "Other" rather than reusing a hue. Snapped to Tailwind v4 steps inside the
+   * OKLCH lightness band (0.43–0.77) and above the chroma floor (C >= 0.10),
+   * then ordered to maximise the worst neighbouring pair.
+   *
+   * Validated light-mode on a white surface, adjacent pairlist (lines, bars):
+   * worst CVD dE 21.9 (deuteranopia), worst normal-vision dE 23.3, all >= 3:1.
+   *
+   * Obligation: under the all-pairs test (any two marks side by side) this
+   * clears cleanly only to 2 series and sits in the 6–8 floor band at 3–4, so
+   * every chart using 3+ slots MUST also carry direct labels or a legend.
+   * That secondary encoding is what makes these legal, not optional polish.
+   */
+  --color-series-1: #008236; /* green-700  — brand, always slot 1 */
+  --color-series-2: #0084d1; /* sky-600    */
+  --color-series-3: #ca3500; /* orange-700 */
+  --color-series-4: #1447e6; /* blue-700   */
+  --color-series-5: #c6005c; /* pink-700   */
+  --color-series-6: #7f22fe; /* violet-600 */
+
+  /*
+   * SEQUENTIAL — magnitude, light to dark in a single hue. Passes the ordinal
+   * checks (monotone L, adjacent dL >= 0.06, light end >= 2:1 on white).
+   * Do not extend upward: green-400 and lighter fall below the 2:1 floor.
+   */
+  --color-seq-1: #00c950; /* green-500 */
+  --color-seq-2: #00a63e; /* green-600 */
+  --color-seq-3: #008236; /* green-700 */
+  --color-seq-4: #016630; /* green-800 */
+
+  /*
+   * STATUS — reserved state, never "series 7". Always shipped with an icon or
+   * label, never colour alone. Note slot 3 (orange-700) sits close to critical,
+   * so a single chart must never draw status marks and categorical series
+   * together; today none do.
+   */
+  --color-status-good: #008236;     /* green-700 */
+  --color-status-warning: #bb4d00;  /* amber-700 — amber-600 is 3.2:1, large-text only */
+  --color-status-critical: #c10007; /* red-700   */
+
+  /* Signed metrics (cashflow, gains): direction, not identity. */
+  --color-chart-positive: #008236;
+  --color-chart-negative: #c10007;
+
+  /*
+   * App chrome. The sidebar sits on a brand-tinted off-white so it reads as
+   * chrome against the white content canvas — the split the old green-950
+   * rail used to provide. Kept as tokens rather than inline hexes so the
+   * chrome surface is named in one place.
+   */
 }
 
 body {

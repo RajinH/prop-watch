@@ -2,6 +2,10 @@ export type Property = {
   id: string
   portfolio_id: string
   name: string
+  // Display-only: rendered on the property map, never read by engine maths.
+  // Optional so engine fixtures aren't forced to carry presentation fields.
+  latitude?: number | null
+  longitude?: number | null
   current_value: number
   current_debt: number
   monthly_rent: number
@@ -21,6 +25,9 @@ export type Property = {
   annual_insurance_premium: number | null
   insurance_policy_type: 'landlord' | 'building' | 'contents' | 'combined' | null
   insurance_renewal_date: string | null
+  // Rent review facts
+  comparable_monthly_rent: number | null
+  last_rent_review_date: string | null
 }
 
 export type PropertySnapshotInsert = {
@@ -74,11 +81,22 @@ export type SensitivityResult = {
   expense_shock_pct: number | null
 }
 
+export type ScenarioPropertyOverride = {
+  interest_rate?: number
+  monthly_rent?: number
+  current_debt?: number
+  monthly_repayment?: number
+}
+
 export type ScenarioAssumptions = {
   interestRateDeltaPercent?: number
   rentDeltaPercent?: number
   expenseDeltaPercent?: number
   valueDeltaPercent?: number
+  // Absolute per-property overrides (keyed by property id), applied before
+  // the portfolio-wide percentage deltas. Used to model a specific
+  // recommendation (e.g. refinance one loan) rather than a uniform shock.
+  propertyOverrides?: Record<string, ScenarioPropertyOverride>
 }
 
 export type ScenarioResult = {
@@ -181,4 +199,43 @@ export type PortfolioHistoryPoint = {
   monthly_cashflow: number
   weighted_lvr: number | null
   yield: number | null
+}
+
+export type DecisionDimensionKey =
+  | 'performance'
+  | 'leverage'
+  | 'cashflow'
+  | 'concentration'
+  | 'data_quality'
+
+export type DecisionDimension = {
+  key: DecisionDimensionKey
+  label: string
+  status: 'attention' | 'watch'
+  severity: 'critical' | 'warning' | 'info'
+  count: number
+  headline: { title: string; description: string }
+  insightTypes: string[]
+}
+
+export type RunwayScenarioKey = 'current' | 'vacancy' | 'rate_plus_2'
+
+export type RunwayStatus =
+  | 'self_funding'    // scenario cashflow >= 0: the reserve is not being drawn down
+  | 'finite'          // negative cashflow and a known reserve: runway_months is a number
+  | 'unknown_reserve' // negative cashflow but cashReserve is null
+
+export type RunwayScenario = {
+  key: RunwayScenarioKey
+  monthly_cashflow: number        // scenario cashflow (can be negative)
+  monthly_out_of_pocket: number   // max(0, -monthly_cashflow)
+  runway_months: number | null    // null unless status === 'finite'
+  runway_capped: boolean          // true when the value hit RUNWAY_CAP_MONTHS
+  status: RunwayStatus
+}
+
+export type RunwayResult = {
+  cash_reserve: number | null
+  vacancy_property_id: string | null  // the property removed in the vacancy scenario
+  scenarios: RunwayScenario[]         // always in order: current, vacancy, rate_plus_2
 }

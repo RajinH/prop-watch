@@ -3,9 +3,18 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { apiPost, apiPatch } from '@/lib/propwatch/api/client'
+import { MapPin, WandSparkles } from 'lucide-react'
+import { apiPost, apiPatch, apiGet, ApiError } from '@/lib/propwatch/api/client'
 import { useToast } from '@/components/ui/ToastProvider'
-import AddressAutocomplete from './AddressAutocomplete'
+import { formatCurrencyShort } from '@/lib/formatters'
+import AddressAutocomplete, { type AddressFields } from './AddressAutocomplete'
+import StaticMap from './StaticMap'
+import { resolveAddressMatch, type HtagAddressCandidate } from '@/lib/propwatch/htag/matchAddress'
+import {
+  loadHtagEstimates,
+  saveHtagEstimates,
+  type HtagEstimatesCache,
+} from '@/lib/storage'
 
 interface PropertyRow {
   id: string
@@ -16,6 +25,8 @@ interface PropertyRow {
   city: string | null
   postcode: string | null
   state: string | null
+  latitude: number | null
+  longitude: number | null
   current_value: number
   current_debt: number
   monthly_rent: number
@@ -33,6 +44,10 @@ interface PropertyRow {
   annual_insurance_premium: number | null
   insurance_policy_type: string | null
   insurance_renewal_date: string | null
+  comparable_monthly_rent: number | null
+  last_rent_review_date: string | null
+  htag_address_key?: string | null
+  htag_loc_pid?: string | null
   [key: string]: unknown
 }
 
@@ -49,6 +64,15 @@ interface FormState {
   city: string
   postcode: string
   state: string
+  // Resolved by Checkify on address select — never hand-entered, so kept as
+  // numbers rather than the string form used by the typed money/date fields.
+  latitude: number | null
+  longitude: number | null
+  // HTAG resolution. The key and loc_pid are persisted so market lookups never
+  // re-geocode; the label is display-only.
+  htag_address_key: string
+  htag_address_label: string
+  htag_loc_pid: string
   // Financials
   current_value: string
   current_debt: string
@@ -57,6 +81,8 @@ interface FormState {
   annual_expenses: string
   purchase_price: string
   purchase_date: string
+  comparable_monthly_rent: string
+  last_rent_review_date: string
   // Loan
   lender: string
   interest_rate: string
@@ -71,7 +97,14 @@ interface FormState {
   insurance_renewal_date: string
 }
 
-const STEPS = ['Property', 'Financials', 'Extras'] as const
+type HtagCandidate = HtagAddressCandidate
+
+const STEPS = ['Property', 'Loan & Insurance', 'Financials'] as const
+
+/** A usage-cap refusal from the metered HTAG routes; its message is user-facing. */
+function isLimitError(e: unknown): e is ApiError {
+  return e instanceof ApiError && (e.status === 429 || e.status === 503)
+}
 const LAST_STEP = STEPS.length - 1
 
 export default function PropertyWizard({ mode, property }: Props) {
@@ -100,6 +133,11 @@ export default function PropertyWizard({ mode, property }: Props) {
     city: property?.city ?? '',
     postcode: property?.postcode ?? '',
     state: property?.state ?? '',
+    latitude: property?.latitude ?? null,
+    longitude: property?.longitude ?? null,
+    htag_address_key: property?.htag_address_key ?? '',
+    htag_address_label: '',
+    htag_loc_pid: property?.htag_loc_pid ?? '',
     current_value: property?.current_value?.toString() ?? '',
     current_debt: property?.current_debt?.toString() ?? '',
     monthly_rent: property?.monthly_rent?.toString() ?? '',
@@ -107,6 +145,8 @@ export default function PropertyWizard({ mode, property }: Props) {
     annual_expenses: property?.annual_expenses?.toString() ?? '',
     purchase_price: property?.purchase_price?.toString() ?? '',
     purchase_date: property?.purchase_date ?? '',
+    comparable_monthly_rent: property?.comparable_monthly_rent?.toString() ?? '',
+    last_rent_review_date: property?.last_rent_review_date ?? '',
     lender: property?.lender ?? '',
     interest_rate: property?.interest_rate != null ? (property.interest_rate * 100).toString() : '',
     interest_rate_type: property?.interest_rate_type ?? '',
@@ -124,15 +164,165 @@ export default function PropertyWizard({ mode, property }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // HTAG resolution state
+  const [htagConflicts, setHtagConflicts] = useState<HtagCandidate[]>([])
+  const [htagResolving, setHtagResolving] = useState(false)
+
+  // Prefill state
+  const [prefillLoading, setPrefillLoading] = useState(false)
+  const [prefillError, setPrefillError] = useState<string | null>(null)
+  // Set when the server refused an HTAG lookup (usage cap or ledger down), so
+  // the user sees why instead of a generic failure.
+  const [htagLimitMessage, setHtagLimitMessage] = useState<string | null>(null)
+
   function set(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  // Any hand edit to the address means the resolved HTAG keys may now point at a
+  // different dwelling or suburb. Drop them rather than save a stale match;
+  // selecting a suggestion re-resolves.
+  const CLEARED_HTAG = { htag_address_key: '', htag_address_label: '', htag_loc_pid: '' }
+
+  function setAddressField(field: 'unit' | 'city' | 'state' | 'postcode', value: string) {
+    setForm((prev) => ({ ...prev, [field]: value, ...CLEARED_HTAG }))
+  }
+
+  function buildAddressText(fields: {
+    unit: string
+    street: string
+    city: string
+    state: string
+    postcode: string
+  }): string {
+    return [
+      fields.unit ? `${fields.unit}/` : '',
+      fields.street,
+      fields.city,
+      fields.state,
+      fields.postcode,
+      'Australia',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  }
+
+  async function resolveHtagAddress(fields: AddressFields) {
+    const addressText = buildAddressText(fields)
+
+    setHtagResolving(true)
+    try {
+      const data = await apiGet<{ results: HtagCandidate[]; total: number }>(
+        `/api/htag/address-resolve?address=${encodeURIComponent(addressText)}`
+      )
+
+      const results = data.results ?? []
+      if (results.length === 0) return
+
+      // Matched on the structured address fields rather than on `score`: HTAG
+      // returns score: null for every candidate, so the old `score >= 0.8` test
+      // could never pass and every address fell through to manual disambiguation.
+      const match = resolveAddressMatch(results, {
+        street: fields.street,
+        city: fields.city,
+        postcode: fields.postcode,
+      })
+
+      if (match) {
+        setForm((prev) => ({
+          ...prev,
+          htag_address_key: match.address_key,
+          htag_address_label: match.address_label,
+          htag_loc_pid: match.loc_pid ?? '',
+        }))
+        setHtagConflicts([])
+      } else {
+        setHtagConflicts(results.slice(0, 4))
+      }
+    } catch (e) {
+      // HTAG is best-effort: an upstream failure stays silent, but a usage cap
+      // is explained when the user reaches Prefill.
+      if (isLimitError(e)) setHtagLimitMessage(e.message)
+    } finally {
+      setHtagResolving(false)
+    }
+  }
+
+  function applyEstimates(est: HtagEstimatesCache) {
+    setForm((prev) => {
+      const next = { ...prev }
+      if (est.price_estimate != null && !prev.current_value)
+        next.current_value = String(Math.round(est.price_estimate))
+      if (est.rent_estimate != null && !prev.monthly_rent)
+        next.monthly_rent = String(Math.round((est.rent_estimate * 52) / 12))
+      if (est.last_sold_price != null && !prev.purchase_price)
+        next.purchase_price = String(Math.round(est.last_sold_price))
+      if (est.last_sold_date != null && !prev.purchase_date)
+        next.purchase_date = est.last_sold_date
+      return next
+    })
+  }
+
+  async function handlePrefill() {
+    setPrefillError(null)
+    if (!form.htag_address_key) {
+      setPrefillError(
+        htagLimitMessage ?? 'Address could not be resolved. Enter financial details manually.'
+      )
+      return
+    }
+
+    const cached = loadHtagEstimates(form.htag_address_key)
+    if (cached) {
+      applyEstimates(cached)
+      return
+    }
+
+    setPrefillLoading(true)
+    try {
+      const data = await apiGet<{
+        results: Array<{
+          address_key: string
+          price_estimate: number | null
+          rent_estimate: number | null
+          last_sold_price: number | null
+          last_sold_date: string | null
+        }>
+      }>(`/api/htag/property-estimates?address_key=${encodeURIComponent(form.htag_address_key)}`)
+
+      const est = data.results?.[0]
+      if (!est) {
+        setPrefillError('No estimates available for this property.')
+        return
+      }
+
+      const entry: HtagEstimatesCache = {
+        price_estimate: est.price_estimate,
+        rent_estimate: est.rent_estimate,
+        last_sold_price: est.last_sold_price,
+        last_sold_date: est.last_sold_date,
+        cachedAt: new Date().toISOString(),
+      }
+      saveHtagEstimates(form.htag_address_key, entry)
+      applyEstimates(entry)
+    } catch (e) {
+      setPrefillError(
+        isLimitError(e) ? e.message : 'Could not fetch estimates. Please enter values manually.'
+      )
+    } finally {
+      setPrefillLoading(false)
+    }
   }
 
   function validateStep(s: number): string | null {
     if (s === 0) {
       if (!form.name.trim()) return 'Give the property a name to continue.'
+      if (!form.street.trim()) return 'Street address is required.'
+      if (!form.city.trim()) return 'City is required.'
+      if (!form.state.trim()) return 'State is required.'
+      if (!form.postcode.trim()) return 'Postcode is required.'
     }
-    if (s === 1) {
+    if (s === 2) {
       if (!form.current_value || Number(form.current_value) <= 0) return 'Current value must be greater than 0.'
       if (form.current_debt === '' || Number(form.current_debt) < 0) return 'Current debt is required.'
       if (form.monthly_rent === '' || Number(form.monthly_rent) < 0) return 'Monthly rent is required (use 0 if vacant).'
@@ -155,7 +345,6 @@ export default function PropertyWizard({ mode, property }: Props) {
     e.preventDefault()
     setError(null)
 
-    // Advance through steps; only the final step actually submits.
     if (step < LAST_STEP) {
       const stepError = validateStep(step)
       if (stepError) return setError(stepError)
@@ -163,7 +352,7 @@ export default function PropertyWizard({ mode, property }: Props) {
       return
     }
 
-    const firstBadStep = validateStep(0) ? 0 : validateStep(1) ? 1 : null
+    const firstBadStep = validateStep(0) ? 0 : validateStep(2) ? 2 : null
     if (firstBadStep !== null) {
       setStep(firstBadStep)
       return setError(validateStep(firstBadStep))
@@ -176,6 +365,30 @@ export default function PropertyWizard({ mode, property }: Props) {
       ...(form.city.trim() ? { city: form.city.trim() } : {}),
       ...(form.postcode.trim() ? { postcode: form.postcode.trim() } : {}),
       ...(form.state.trim() ? { state: form.state.trim() } : {}),
+      // On edit, explicitly null cleared coordinates so a retyped address wipes
+      // the old point and lets the backfill resolve the new one; on create
+      // there is nothing to clear, so just omit them.
+      ...(form.latitude != null && form.longitude != null
+        ? { latitude: form.latitude, longitude: form.longitude }
+        : mode === 'edit'
+          ? { latitude: null, longitude: null }
+          : {}),
+      // Same pattern for the HTAG keys: an edited address has already cleared
+      // them in the form, so null them here rather than keep the old match.
+      ...(form.htag_address_key
+        ? {
+            htag_address_key: form.htag_address_key,
+            // A candidate can come back without a loc_pid; on edit, null it so
+            // the previous address's locality can't survive.
+            ...(form.htag_loc_pid
+              ? { htag_loc_pid: form.htag_loc_pid }
+              : mode === 'edit'
+                ? { htag_loc_pid: null }
+                : {}),
+          }
+        : mode === 'edit'
+          ? { htag_address_key: null, htag_loc_pid: null }
+          : {}),
       current_value: Number(form.current_value),
       current_debt: Number(form.current_debt),
       monthly_rent: Number(form.monthly_rent),
@@ -183,6 +396,12 @@ export default function PropertyWizard({ mode, property }: Props) {
       annual_expenses: Number(form.annual_expenses),
       ...(form.purchase_price ? { purchase_price: Number(form.purchase_price) } : {}),
       ...(form.purchase_date ? { purchase_date: form.purchase_date } : {}),
+      ...(form.comparable_monthly_rent
+        ? { comparable_monthly_rent: Number(form.comparable_monthly_rent) }
+        : {}),
+      ...(form.last_rent_review_date
+        ? { last_rent_review_date: form.last_rent_review_date }
+        : {}),
     }
 
     if (showLoan) {
@@ -219,7 +438,7 @@ export default function PropertyWizard({ mode, property }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <div>
         <Link
           href="/properties"
@@ -232,349 +451,518 @@ export default function PropertyWizard({ mode, property }: Props) {
         </h1>
         <p className="text-slate-500 mt-1">
           {step === 0 && 'Name it and tell us where it is.'}
-          {step === 1 && 'A few numbers so we can track its performance.'}
-          {step === 2 && 'Loan and insurance details — optional, add them anytime.'}
+          {step === 1 && 'Loan and insurance details — optional, add them anytime.'}
+          {step === 2 && 'A few numbers so we can track its performance.'}
         </p>
       </div>
 
       <Stepper step={step} onStepClick={(i) => i < step && goTo(i)} />
 
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col gap-5"
-      >
-        {step === 0 && (
-          <>
-            <Field label="Name" required>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-                className={inputClass}
-                placeholder="e.g. Brighton townhouse"
-                autoFocus
-              />
-            </Field>
-
-            <Field label="Search address">
-              <AddressAutocomplete
-                value={form.street}
-                onChange={(v) => set('street', v)}
-                onSelect={(f) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    unit: f.unit,
-                    street: f.street,
-                    city: f.city,
-                    postcode: f.postcode,
-                    state: f.state,
-                  }))
-                }
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Unit (optional)">
+      {/* Form stays in a readable column; the map and running summary sit
+          alongside it so they remain visible across all three steps instead of
+          stretching the inputs across the full width of the screen. */}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col gap-5"
+        >
+          {step === 0 && (
+            <>
+              <Field label="Name" required>
                 <input
                   type="text"
-                  value={form.unit}
-                  onChange={(e) => set('unit', e.target.value)}
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
                   className={inputClass}
-                  placeholder="e.g. 12"
-                />
-              </Field>
-              <Field label="City">
-                <input
-                  type="text"
-                  value={form.city}
-                  onChange={(e) => set('city', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. Sydney"
-                />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="State">
-                <input
-                  type="text"
-                  value={form.state}
-                  onChange={(e) => set('state', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. NSW"
-                />
-              </Field>
-              <Field label="Postcode">
-                <input
-                  type="text"
-                  value={form.postcode}
-                  onChange={(e) => set('postcode', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. 2000"
-                />
-              </Field>
-            </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Current value ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.current_value}
-                  onChange={(e) => set('current_value', e.target.value)}
-                  className={inputClass}
-                  placeholder="650000"
+                  placeholder="e.g. Brighton townhouse"
                   autoFocus
                 />
               </Field>
-              <Field label="Current debt ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.current_debt}
-                  onChange={(e) => set('current_debt', e.target.value)}
-                  className={inputClass}
-                  placeholder="420000"
-                />
-              </Field>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Monthly rent ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.monthly_rent}
-                  onChange={(e) => set('monthly_rent', e.target.value)}
-                  className={inputClass}
-                  placeholder="0 if vacant"
+              <Field label="Street" required>
+                <AddressAutocomplete
+                  value={form.street}
+                  onChange={(v) =>
+                    // Typing over the street by hand invalidates any coordinates
+                    // resolved for the previous address — drop them rather than
+                    // pin the map to a place the user has just moved away from.
+                    // Selecting a suggestion below repopulates them.
+                    setForm((prev) => ({
+                      ...prev,
+                      street: v,
+                      latitude: null,
+                      longitude: null,
+                      ...CLEARED_HTAG,
+                    }))
+                  }
+                  onSelect={(f) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      unit: f.unit,
+                      street: f.street,
+                      city: f.city,
+                      postcode: f.postcode,
+                      state: f.state,
+                      latitude: f.latitude,
+                      longitude: f.longitude,
+                      ...CLEARED_HTAG,
+                    }))
+                    setHtagConflicts([])
+                    resolveHtagAddress(f)
+                  }}
                 />
               </Field>
-              <Field label="Monthly repayment ($)" required>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.monthly_repayment}
-                  onChange={(e) => set('monthly_repayment', e.target.value)}
-                  className={inputClass}
-                  placeholder="2100"
-                />
-              </Field>
-            </div>
 
-            <Field label="Annual expenses ($)" required>
-              <input
-                type="number"
-                min={0}
-                value={form.annual_expenses}
-                onChange={(e) => set('annual_expenses', e.target.value)}
-                className={inputClass}
-                placeholder="6000"
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Purchase price (optional)">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.purchase_price}
-                  onChange={(e) => set('purchase_price', e.target.value)}
-                  className={inputClass}
-                  placeholder="500000"
-                />
-              </Field>
-              <Field label="Purchase date (optional)">
-                <input
-                  type="date"
-                  value={form.purchase_date}
-                  onChange={(e) => set('purchase_date', e.target.value)}
-                  className={inputClass}
-                />
-              </Field>
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <CollapsibleSection
-              open={showLoan}
-              onToggle={() => setShowLoan((v) => !v)}
-              openLabel="Hide loan details"
-              closedLabel="Add loan details"
-            >
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Lender">
+                <Field label="Unit (optional)">
                   <input
                     type="text"
-                    value={form.lender}
-                    onChange={(e) => set('lender', e.target.value)}
+                    value={form.unit}
+                    onChange={(e) => setAddressField('unit', e.target.value)}
                     className={inputClass}
-                    placeholder="e.g. ANZ"
+                    placeholder="e.g. 12"
                   />
                 </Field>
-                <Field label="Interest rate (%)">
+                <Field label="City" required>
                   <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    step={0.01}
-                    value={form.interest_rate}
-                    onChange={(e) => set('interest_rate', e.target.value)}
+                    type="text"
+                    value={form.city}
+                    onChange={(e) => setAddressField('city', e.target.value)}
                     className={inputClass}
-                    placeholder="e.g. 6.5"
+                    placeholder="e.g. Sydney"
                   />
                 </Field>
               </div>
 
-              <Field label="Rate type">
-                <RadioGroup
-                  value={form.interest_rate_type}
-                  onChange={(v) => set('interest_rate_type', v)}
-                  options={[
-                    { value: 'variable', label: 'Variable' },
-                    { value: 'fixed', label: 'Fixed' },
-                    { value: 'split', label: 'Split' },
-                  ]}
-                />
-              </Field>
-
-              <Field label="Loan type">
-                <RadioGroup
-                  value={form.loan_type}
-                  onChange={(v) => set('loan_type', v)}
-                  options={[
-                    { value: 'principal_and_interest', label: 'P&I' },
-                    { value: 'interest_only', label: 'Interest only' },
-                  ]}
-                />
-              </Field>
-
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Loan term (years)">
+                <Field label="State" required>
                   <input
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={form.loan_term_years}
-                    onChange={(e) => set('loan_term_years', e.target.value)}
+                    type="text"
+                    value={form.state}
+                    onChange={(e) => setAddressField('state', e.target.value)}
                     className={inputClass}
-                    placeholder="e.g. 25"
+                    placeholder="e.g. NSW"
                   />
                 </Field>
-                {(form.interest_rate_type === 'fixed' || form.interest_rate_type === 'split') && (
-                  <Field label="Fixed rate expiry">
+                <Field label="Postcode" required>
+                  <input
+                    type="text"
+                    value={form.postcode}
+                    onChange={(e) => setAddressField('postcode', e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. 2000"
+                  />
+                </Field>
+              </div>
+
+              {htagConflicts.length > 0 && !form.htag_address_key && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-col gap-2">
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                    Multiple matching addresses found — please select one
+                  </p>
+                  {htagConflicts.map((c) => (
+                    <button
+                      key={c.address_key}
+                      type="button"
+                      onClick={() => {
+                        setForm((prev) => ({
+                          ...prev,
+                          htag_address_key: c.address_key,
+                          htag_address_label: c.address_label,
+                          htag_loc_pid: c.loc_pid ?? '',
+                        }))
+                        setHtagConflicts([])
+                      }}
+                      className="flex items-center justify-between rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:bg-amber-50 transition-colors"
+                    >
+                      <span>{c.address_label}</span>
+                      <span className="ml-3 text-xs text-slate-400 shrink-0">Select</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {htagResolving && (
+                <p className="text-xs text-slate-400">Resolving address…</p>
+              )}
+
+              {form.htag_address_key && (
+                <p className="text-xs text-green-700">
+                  ✓ Address confirmed{form.htag_address_label && `: ${form.htag_address_label}`}
+                </p>
+              )}
+            </>
+          )}
+
+          {step === 1 && (
+            <>
+              <CollapsibleSection
+                open={showLoan}
+                onToggle={() => setShowLoan((v) => !v)}
+                openLabel="Hide loan details"
+                closedLabel="Add loan details"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Lender">
                     <input
-                      type="date"
-                      value={form.fixed_rate_expiry}
-                      onChange={(e) => set('fixed_rate_expiry', e.target.value)}
+                      type="text"
+                      value={form.lender}
+                      onChange={(e) => set('lender', e.target.value)}
                       className={inputClass}
+                      placeholder="e.g. ANZ"
                     />
                   </Field>
-                )}
-              </div>
-            </CollapsibleSection>
+                  <Field label="Interest rate (%)">
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      step={0.01}
+                      value={form.interest_rate}
+                      onChange={(e) => set('interest_rate', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 6.5"
+                    />
+                  </Field>
+                </div>
 
-            <CollapsibleSection
-              open={showInsurance}
-              onToggle={() => setShowInsurance((v) => !v)}
-              openLabel="Hide insurance details"
-              closedLabel="Add insurance details"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Insurer">
-                  <input
-                    type="text"
-                    value={form.insurer}
-                    onChange={(e) => set('insurer', e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. Suncorp"
+                <Field label="Rate type">
+                  <RadioGroup
+                    value={form.interest_rate_type}
+                    onChange={(v) => set('interest_rate_type', v)}
+                    options={[
+                      { value: 'variable', label: 'Variable' },
+                      { value: 'fixed', label: 'Fixed' },
+                      { value: 'split', label: 'Split' },
+                    ]}
                   />
                 </Field>
-                <Field label="Annual premium ($)">
+
+                <Field label="Loan type">
+                  <RadioGroup
+                    value={form.loan_type}
+                    onChange={(v) => set('loan_type', v)}
+                    options={[
+                      { value: 'principal_and_interest', label: 'P&I' },
+                      { value: 'interest_only', label: 'Interest only' },
+                    ]}
+                  />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Loan term (years)">
+                    <input
+                      type="number"
+                      min={1}
+                      max={40}
+                      value={form.loan_term_years}
+                      onChange={(e) => set('loan_term_years', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 25"
+                    />
+                  </Field>
+                  {(form.interest_rate_type === 'fixed' || form.interest_rate_type === 'split') && (
+                    <Field label="Fixed rate expiry">
+                      <input
+                        type="date"
+                        value={form.fixed_rate_expiry}
+                        onChange={(e) => set('fixed_rate_expiry', e.target.value)}
+                        className={inputClass}
+                      />
+                    </Field>
+                  )}
+                </div>
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                open={showInsurance}
+                onToggle={() => setShowInsurance((v) => !v)}
+                openLabel="Hide insurance details"
+                closedLabel="Add insurance details"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Insurer">
+                    <input
+                      type="text"
+                      value={form.insurer}
+                      onChange={(e) => set('insurer', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. Suncorp"
+                    />
+                  </Field>
+                  <Field label="Annual premium ($)">
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.annual_insurance_premium}
+                      onChange={(e) => set('annual_insurance_premium', e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 1800"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Policy type">
+                  <RadioGroup
+                    value={form.insurance_policy_type}
+                    onChange={(v) => set('insurance_policy_type', v)}
+                    options={[
+                      { value: 'landlord', label: 'Landlord' },
+                      { value: 'building', label: 'Building' },
+                      { value: 'contents', label: 'Contents' },
+                      { value: 'combined', label: 'Combined' },
+                    ]}
+                  />
+                </Field>
+
+                <Field label="Renewal date">
+                  <input
+                    type="date"
+                    value={form.insurance_renewal_date}
+                    onChange={(e) => set('insurance_renewal_date', e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              </CollapsibleSection>
+
+              {!showLoan && !showInsurance && (
+                <p className="text-sm text-slate-400 text-center py-2">
+                  Nothing required here — you can finish now and add these later.
+                </p>
+              )}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Prefill from data</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Auto-fill estimated value, rent and purchase history
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePrefill}
+                  disabled={prefillLoading || !form.htag_address_key}
+                  className="flex items-center gap-2 rounded-lg bg-green-800 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  <WandSparkles size={14} />
+                  {prefillLoading ? 'Fetching…' : 'Prefill'}
+                </button>
+              </div>
+
+              {prefillError && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                  {prefillError}
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Current value ($)" required>
                   <input
                     type="number"
                     min={0}
-                    value={form.annual_insurance_premium}
-                    onChange={(e) => set('annual_insurance_premium', e.target.value)}
+                    value={form.current_value}
+                    onChange={(e) => set('current_value', e.target.value)}
                     className={inputClass}
-                    placeholder="e.g. 1800"
+                    placeholder="650000"
+                    autoFocus
+                  />
+                </Field>
+                <Field label="Current debt ($)" required>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.current_debt}
+                    onChange={(e) => set('current_debt', e.target.value)}
+                    className={inputClass}
+                    placeholder="420000"
                   />
                 </Field>
               </div>
 
-              <Field label="Policy type">
-                <RadioGroup
-                  value={form.insurance_policy_type}
-                  onChange={(v) => set('insurance_policy_type', v)}
-                  options={[
-                    { value: 'landlord', label: 'Landlord' },
-                    { value: 'building', label: 'Building' },
-                    { value: 'contents', label: 'Contents' },
-                    { value: 'combined', label: 'Combined' },
-                  ]}
-                />
-              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Monthly rent ($)" required>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.monthly_rent}
+                    onChange={(e) => set('monthly_rent', e.target.value)}
+                    className={inputClass}
+                    placeholder="0 if vacant"
+                  />
+                </Field>
+                <Field label="Monthly repayment ($)" required>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.monthly_repayment}
+                    onChange={(e) => set('monthly_repayment', e.target.value)}
+                    className={inputClass}
+                    placeholder="2100"
+                  />
+                </Field>
+              </div>
 
-              <Field label="Renewal date">
+              <Field label="Annual expenses ($)" required>
                 <input
-                  type="date"
-                  value={form.insurance_renewal_date}
-                  onChange={(e) => set('insurance_renewal_date', e.target.value)}
+                  type="number"
+                  min={0}
+                  value={form.annual_expenses}
+                  onChange={(e) => set('annual_expenses', e.target.value)}
                   className={inputClass}
+                  placeholder="6000"
                 />
               </Field>
-            </CollapsibleSection>
 
-            {!showLoan && !showInsurance && (
-              <p className="text-sm text-slate-400 text-center py-2">
-                Nothing required here — you can finish now and add these later.
-              </p>
-            )}
-          </>
-        )}
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Comparable market rent ($, optional)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.comparable_monthly_rent}
+                    onChange={(e) => set('comparable_monthly_rent', e.target.value)}
+                    className={inputClass}
+                    placeholder="What similar properties rent for"
+                  />
+                </Field>
+                <Field label="Last rent review (optional)">
+                  <input
+                    type="date"
+                    value={form.last_rent_review_date}
+                    onChange={(e) => set('last_rent_review_date', e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
 
-        {error && (
-          <p className="text-sm text-red-600 rounded-xl bg-red-50 px-4 py-2">{error}</p>
-        )}
-
-        <div className="flex gap-3 pt-1">
-          {step === 0 ? (
-            <Link
-              href="/properties"
-              className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              Cancel
-            </Link>
-          ) : (
-            <button
-              type="button"
-              onClick={goBack}
-              className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              ← Back
-            </button>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Purchase price (optional)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.purchase_price}
+                    onChange={(e) => set('purchase_price', e.target.value)}
+                    className={inputClass}
+                    placeholder="500000"
+                  />
+                </Field>
+                <Field label="Purchase date (optional)">
+                  <input
+                    type="date"
+                    value={form.purchase_date}
+                    onChange={(e) => set('purchase_date', e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+            </>
           )}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex-1 rounded-xl bg-green-800 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-60"
-          >
-            {step < LAST_STEP
-              ? 'Continue →'
-              : submitting
-                ? 'Saving…'
-                : mode === 'create'
-                  ? 'Add property'
-                  : 'Save changes'}
-          </button>
-        </div>
-      </form>
+
+          {error && (
+            <p className="text-sm text-red-600 rounded-xl bg-red-50 px-4 py-2">{error}</p>
+          )}
+
+          {/* Actions sit at their natural width against a divider rather than
+              stretching edge to edge, so the primary action reads as one button
+              instead of half the form's width. */}
+          <div className="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-5">
+            {step === 0 ? (
+              <Link
+                href="/properties"
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-center text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={goBack}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                ← Back
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-xl bg-green-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-60"
+            >
+              {step < LAST_STEP
+                ? 'Continue →'
+                : submitting
+                  ? 'Saving…'
+                  : mode === 'create'
+                    ? 'Add property'
+                    : 'Save changes'}
+            </button>
+          </div>
+        </form>
+
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-8">
+          {form.latitude != null && form.longitude != null ? (
+            <StaticMap
+              latitude={form.latitude}
+              longitude={form.longitude}
+              label={form.street || 'the selected address'}
+              className="h-44 w-full rounded-2xl border border-slate-200"
+            />
+          ) : (
+            <div className="flex h-44 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
+              <MapPin size={18} className="text-slate-300" />
+              <p className="text-xs text-slate-400">
+                Choose an address suggestion and its location appears here.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Summary
+            </p>
+            <SummaryRow label="Name" value={form.name.trim()} />
+            <SummaryRow
+              label="Address"
+              value={[
+                [form.unit.trim(), form.street.trim()].filter(Boolean).join('/'),
+                [form.city.trim(), form.state.trim(), form.postcode.trim()]
+                  .filter(Boolean)
+                  .join(' '),
+              ]
+                .filter(Boolean)
+                .join(', ')}
+            />
+            <SummaryRow label="Value" value={formatMoneyField(form.current_value)} />
+            <SummaryRow
+              label="Rent"
+              value={
+                formatMoneyField(form.monthly_rent) === '—'
+                  ? '—'
+                  : `${formatMoneyField(form.monthly_rent)}/mo`
+              }
+            />
+          </div>
+        </aside>
+      </div>
+    </div>
+  )
+}
+
+/** Money fields are held as raw strings while typing; show them only once valid. */
+function formatMoneyField(raw: string): string {
+  const n = Number(raw)
+  return raw.trim() === '' || !Number.isFinite(n) ? '—' : formatCurrencyShort(n)
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="shrink-0 text-xs text-slate-400">{label}</span>
+      <span className="truncate text-right text-sm font-medium text-slate-700">
+        {value || '—'}
+      </span>
     </div>
   )
 }
