@@ -11,8 +11,6 @@ import AddressAutocomplete, { type AddressFields } from './AddressAutocomplete'
 import StaticMap from './StaticMap'
 import { resolveAddressMatch, type HtagAddressCandidate } from '@/lib/propwatch/htag/matchAddress'
 import {
-  loadHtagAddressKey,
-  saveHtagAddressKey,
   loadHtagEstimates,
   saveHtagEstimates,
   type HtagEstimatesCache,
@@ -48,6 +46,8 @@ interface PropertyRow {
   insurance_renewal_date: string | null
   comparable_monthly_rent: number | null
   last_rent_review_date: string | null
+  htag_address_key?: string | null
+  htag_loc_pid?: string | null
   [key: string]: unknown
 }
 
@@ -68,9 +68,11 @@ interface FormState {
   // numbers rather than the string form used by the typed money/date fields.
   latitude: number | null
   longitude: number | null
-  // HTAG resolution (wizard-only, not submitted)
+  // HTAG resolution. The key and loc_pid are persisted so market lookups never
+  // re-geocode; the label is display-only.
   htag_address_key: string
   htag_address_label: string
+  htag_loc_pid: string
   // Financials
   current_value: string
   current_debt: string
@@ -128,8 +130,9 @@ export default function PropertyWizard({ mode, property }: Props) {
     state: property?.state ?? '',
     latitude: property?.latitude ?? null,
     longitude: property?.longitude ?? null,
-    htag_address_key: '',
+    htag_address_key: property?.htag_address_key ?? '',
     htag_address_label: '',
+    htag_loc_pid: property?.htag_loc_pid ?? '',
     current_value: property?.current_value?.toString() ?? '',
     current_debt: property?.current_debt?.toString() ?? '',
     monthly_rent: property?.monthly_rent?.toString() ?? '',
@@ -168,6 +171,15 @@ export default function PropertyWizard({ mode, property }: Props) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  // Any hand edit to the address means the resolved HTAG keys may now point at a
+  // different dwelling or suburb. Drop them rather than save a stale match;
+  // selecting a suggestion re-resolves.
+  const CLEARED_HTAG = { htag_address_key: '', htag_address_label: '', htag_loc_pid: '' }
+
+  function setAddressField(field: 'unit' | 'city' | 'state' | 'postcode', value: string) {
+    setForm((prev) => ({ ...prev, [field]: value, ...CLEARED_HTAG }))
+  }
+
   function buildAddressText(fields: {
     unit: string
     street: string
@@ -190,17 +202,6 @@ export default function PropertyWizard({ mode, property }: Props) {
   async function resolveHtagAddress(fields: AddressFields) {
     const addressText = buildAddressText(fields)
 
-    const cached = loadHtagAddressKey(addressText)
-    if (cached) {
-      setForm((prev) => ({
-        ...prev,
-        htag_address_key: cached.address_key,
-        htag_address_label: cached.address_label,
-      }))
-      setHtagConflicts([])
-      return
-    }
-
     setHtagResolving(true)
     try {
       const data = await apiGet<{ results: HtagCandidate[]; total: number }>(
@@ -220,16 +221,11 @@ export default function PropertyWizard({ mode, property }: Props) {
       })
 
       if (match) {
-        const entry = {
-          address_key: match.address_key,
-          address_label: match.address_label,
-          cachedAt: new Date().toISOString(),
-        }
-        saveHtagAddressKey(addressText, entry)
         setForm((prev) => ({
           ...prev,
           htag_address_key: match.address_key,
           htag_address_label: match.address_label,
+          htag_loc_pid: match.loc_pid ?? '',
         }))
         setHtagConflicts([])
       } else {
@@ -348,7 +344,6 @@ export default function PropertyWizard({ mode, property }: Props) {
       return setError(validateStep(firstBadStep))
     }
 
-    // htag_address_key and htag_address_label are wizard-only — excluded from payload
     const payload: Record<string, unknown> = {
       name: form.name.trim(),
       ...(form.unit.trim() ? { unit: form.unit.trim() } : {}),
@@ -363,6 +358,22 @@ export default function PropertyWizard({ mode, property }: Props) {
         ? { latitude: form.latitude, longitude: form.longitude }
         : mode === 'edit'
           ? { latitude: null, longitude: null }
+          : {}),
+      // Same pattern for the HTAG keys: an edited address has already cleared
+      // them in the form, so null them here rather than keep the old match.
+      ...(form.htag_address_key
+        ? {
+            htag_address_key: form.htag_address_key,
+            // A candidate can come back without a loc_pid; on edit, null it so
+            // the previous address's locality can't survive.
+            ...(form.htag_loc_pid
+              ? { htag_loc_pid: form.htag_loc_pid }
+              : mode === 'edit'
+                ? { htag_loc_pid: null }
+                : {}),
+          }
+        : mode === 'edit'
+          ? { htag_address_key: null, htag_loc_pid: null }
           : {}),
       current_value: Number(form.current_value),
       current_debt: Number(form.current_debt),
@@ -467,6 +478,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                       street: v,
                       latitude: null,
                       longitude: null,
+                      ...CLEARED_HTAG,
                     }))
                   }
                   onSelect={(f) => {
@@ -479,8 +491,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                       state: f.state,
                       latitude: f.latitude,
                       longitude: f.longitude,
-                      htag_address_key: '',
-                      htag_address_label: '',
+                      ...CLEARED_HTAG,
                     }))
                     setHtagConflicts([])
                     resolveHtagAddress(f)
@@ -493,7 +504,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                   <input
                     type="text"
                     value={form.unit}
-                    onChange={(e) => set('unit', e.target.value)}
+                    onChange={(e) => setAddressField('unit', e.target.value)}
                     className={inputClass}
                     placeholder="e.g. 12"
                   />
@@ -502,7 +513,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                   <input
                     type="text"
                     value={form.city}
-                    onChange={(e) => set('city', e.target.value)}
+                    onChange={(e) => setAddressField('city', e.target.value)}
                     className={inputClass}
                     placeholder="e.g. Sydney"
                   />
@@ -514,7 +525,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                   <input
                     type="text"
                     value={form.state}
-                    onChange={(e) => set('state', e.target.value)}
+                    onChange={(e) => setAddressField('state', e.target.value)}
                     className={inputClass}
                     placeholder="e.g. NSW"
                   />
@@ -523,7 +534,7 @@ export default function PropertyWizard({ mode, property }: Props) {
                   <input
                     type="text"
                     value={form.postcode}
-                    onChange={(e) => set('postcode', e.target.value)}
+                    onChange={(e) => setAddressField('postcode', e.target.value)}
                     className={inputClass}
                     placeholder="e.g. 2000"
                   />
@@ -540,22 +551,11 @@ export default function PropertyWizard({ mode, property }: Props) {
                       key={c.address_key}
                       type="button"
                       onClick={() => {
-                        const addressText = buildAddressText({
-                          unit: form.unit,
-                          street: form.street,
-                          city: form.city,
-                          state: form.state,
-                          postcode: form.postcode,
-                        })
-                        saveHtagAddressKey(addressText, {
-                          address_key: c.address_key,
-                          address_label: c.address_label,
-                          cachedAt: new Date().toISOString(),
-                        })
                         setForm((prev) => ({
                           ...prev,
                           htag_address_key: c.address_key,
                           htag_address_label: c.address_label,
+                          htag_loc_pid: c.loc_pid ?? '',
                         }))
                         setHtagConflicts([])
                       }}
@@ -574,7 +574,7 @@ export default function PropertyWizard({ mode, property }: Props) {
 
               {form.htag_address_key && (
                 <p className="text-xs text-green-700">
-                  ✓ Address confirmed: {form.htag_address_label}
+                  ✓ Address confirmed{form.htag_address_label && `: ${form.htag_address_label}`}
                 </p>
               )}
             </>

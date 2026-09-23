@@ -15,6 +15,9 @@ const updatePropertySchema = z
     state: z.string().max(100).nullable().optional(),
     latitude: z.number().min(-90).max(90).nullable().optional(),
     longitude: z.number().min(-180).max(180).nullable().optional(),
+    // HTAG join keys; null clears them when the address changes
+    htag_address_key: z.string().max(200).nullable().optional(),
+    htag_loc_pid: z.string().max(50).nullable().optional(),
     current_value: z.number().nonnegative().optional(),
     current_debt: z.number().nonnegative().optional(),
     monthly_rent: z.number().nonnegative().optional(),

@@ -1,6 +1,8 @@
 // Server-only: this module reads HTAG_API_KEY and is only imported by route handlers.
 // HTAG_API_KEY is intentionally not NEXT_PUBLIC_, so it is never bundled into client code.
 
+import { isHtagMockEnabled, mockGeocode, mockEstimates } from './mock'
+
 const BASE_URL = 'https://api.htagai.com/v1'
 
 export interface HtagGeocodedAddress {
@@ -126,10 +128,18 @@ async function htagGet<T>(path: string, params: HtagParams): Promise<T> {
 
 /** Geocode a free-text address to get candidate address_keys with similarity scores. */
 export function htagGeocodeAddress(address: string): Promise<HtagGeocodeResult> {
+  if (isHtagMockEnabled()) {
+    console.log('[htag:mock] /address/geocode')
+    return Promise.resolve(mockGeocode(address))
+  }
   return htagGet<HtagGeocodeResult>('/address/geocode', { address })
 }
 
 /** Fetch price/rent estimates and transaction history for a resolved address_key. */
 export function htagPropertyEstimates(address_key: string): Promise<HtagEstimatesResult> {
+  if (isHtagMockEnabled()) {
+    console.log('[htag:mock] /property/estimates')
+    return Promise.resolve(mockEstimates(address_key))
+  }
   return htagGet<HtagEstimatesResult>('/property/estimates', { address_key })
 }

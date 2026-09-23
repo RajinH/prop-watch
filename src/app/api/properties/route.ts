@@ -15,6 +15,9 @@ const createPropertySchema = z.object({
   state: z.string().max(100).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  // HTAG join keys, resolved by the wizard's address match
+  htag_address_key: z.string().max(200).optional(),
+  htag_loc_pid: z.string().max(50).optional(),
   current_value: z.number().nonnegative(),
   current_debt: z.number().nonnegative(),
   monthly_rent: z.number().nonnegative(),

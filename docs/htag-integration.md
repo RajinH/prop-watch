@@ -229,10 +229,18 @@ outside the dev routes, and both are called only by `PropertyWizard`:
 | `/address/geocode` | user picks an address from Checkify autocomplete | **$0.031** per address |
 | `/property/estimates` | user clicks *Prefill* | free tier, 1 unit |
 
-Neither fires on keystroke or page load, and both check the localStorage cache
-first. **So the marginal cost of a user adding a property is ~$0.031**, entirely
+In development, set `HTAG_MOCK=1` (in `.env.development.local`) to serve both from
+`htag/mock.ts` instead: the geocode mock echoes the entered address back as a
+matching candidate plus a same-street decoy, estimates are deterministic per
+address, and `loc_pid` is `MOCK-<state><postcode>`. It is ignored in production.
+The dev probe routes always call the real API.
+
+Neither fires on keystroke or page load. Estimates check a localStorage cache
+first; geocode does not, since the resolved `htag_address_key` and `htag_loc_pid`
+are saved on the property (2026-09-23) and editing reuses them without a call.
+**So the marginal cost of a user adding a property is ~$0.031**, entirely
 geocode. Realistically $0.03-$0.10 once you allow for correcting a wrong address
-pick and for the cache being per-browser, so a second device re-pays.
+pick, since every address selection re-geocodes.
 
 Two consequences worth holding onto:
 

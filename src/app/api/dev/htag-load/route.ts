@@ -10,6 +10,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin-client'
 
 export const runtime = 'nodejs'
 
@@ -355,9 +356,13 @@ export async function GET(request: Request) {
 
   // Chunked: a 3-year series across several localities comfortably exceeds a
   // comfortable single-statement payload.
+  // Market tables are shared reference data with no user write policy, so they
+  // go through the service role. Owner-scoped tables below stay on the user's
+  // session so RLS still checks they belong to this user.
+  const admin = getSupabaseAdminClient()
   const rows = [...trends.values()]
   for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await supabase
+    const { error } = await admin
       .from('market_trends')
       .upsert(rows.slice(i, i + 500), {
         onConflict: 'area_id,area_level,period_end,property_type,bedrooms',
@@ -366,7 +371,7 @@ export async function GET(request: Request) {
   }
 
   if (snapshots.size > 0) {
-    const { error } = await supabase
+    const { error } = await admin
       .from('market_snapshots')
       .upsert([...snapshots.values()], { onConflict: 'area_id,area_level,property_type' })
     if (error) errors.push(`market_snapshots: ${error.message}`)
