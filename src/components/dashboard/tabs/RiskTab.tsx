@@ -10,6 +10,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart'
 import type { RiskProfile, SensitivityResult, PortfolioSnapshotInsert, PropertyDebtProjection } from '@/lib/propwatch/engine/types'
+import { assignSeriesColors, foldToSeriesCap, SERIES_OTHER, CHART_CROSSHAIR } from '@/lib/propwatch/chartPalette'
 
 interface InsightRow {
   id: string
@@ -52,16 +53,8 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
 
 const STRESS_TYPES = new Set(['rate_sensitivity', 'lvr_high', 'cashflow_negative', 'lvr_moderate'])
 
-const DEBT_LINE_COLORS = [
-  'var(--color-chart-1)',
-  'var(--color-chart-2)',
-  'var(--color-chart-3)',
-  'var(--color-chart-4)',
-  'var(--color-chart-5)',
-]
-
 const sensitivityChartConfig = {
-  cashflow: { label: 'Cashflow', color: 'var(--color-chart-1)' },
+  cashflow: { label: 'Cashflow', color: 'var(--color-series-1)' },
 } satisfies ChartConfig
 
 function fmtMoney(n: number) {
@@ -76,12 +69,42 @@ export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: s
   // One series per property, keyed by a CSS-safe slug (property names can't be
   // custom-property names). The slug is the dataKey, so ChartConfig lookups in
   // both the tooltip and the legend resolve to the human label.
-  const debtSeries = drawableProjections.map((d, i) => ({
+  //
+  // Past the slot count the tail is summed into a single neutral "Other" line
+  // rather than cycling the palette — a 7th property reusing slot 1's hue is
+  // indistinguishable from it. Colour comes from the property id, not the row
+  // index, so re-ordering the list never repaints the survivors.
+  const { kept, folded } = foldToSeriesCap(drawableProjections, (d) =>
+    Math.max(...d.curve.map((c) => c.balance))
+  )
+  const colorById = assignSeriesColors(kept.map((d) => d.property_id))
+
+  const debtSeries = kept.map((d, i) => ({
     key: `debt${i}`,
     name: d.property_name,
-    color: DEBT_LINE_COLORS[i % DEBT_LINE_COLORS.length],
+    color: colorById[d.property_id],
     curve: d.curve,
   }))
+
+  if (folded.length > 0) {
+    const byYear = new Map<number, { balance: number; cumulative_interest: number }>()
+    for (const d of folded) {
+      for (const point of d.curve) {
+        const acc = byYear.get(point.year) ?? { balance: 0, cumulative_interest: 0 }
+        acc.balance += point.balance
+        acc.cumulative_interest += point.cumulative_interest
+        byYear.set(point.year, acc)
+      }
+    }
+    debtSeries.push({
+      key: `debt${kept.length}`,
+      name: `Other (${folded.length} properties)`,
+      color: SERIES_OTHER,
+      curve: [...byYear.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([year, acc]) => ({ year, ...acc })),
+    })
+  }
 
   const debtChartConfig: ChartConfig = Object.fromEntries(
     debtSeries.map((s) => [s.key, { label: s.name, color: s.color }])
@@ -100,13 +123,36 @@ export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: s
     return row
   })
 
-  // Generate sensitivity line chart data (client-side, no API)
-  const lineData = Array.from({ length: 11 }, (_, i) => {
+  // Sensitivity curve (client-side, no API). The x-axis carries the rate rise
+  // as a NUMBER in percentage points, not a "+0.5%" string: a category axis
+  // cannot position a reference line at an arbitrary value, which is why the
+  // break-even rate could only ever be stated in a card instead of marked on
+  // the chart that exists to show it.
+  const breakeven = sensitivity.rate_breakeven_pct
+
+  // computeSensitivity clamps rate_breakeven_pct to 10, so a value AT the cap
+  // means "at least 10%", not a located crossing — marking it would assert a
+  // point on the curve we do not actually know. Below the cap the engine uses
+  // the same cost-per-point formula this curve does, so the marker lands
+  // exactly where the line crosses zero.
+  const SENSITIVITY_MAX_RATE = 10
+  const markBreakeven = breakeven !== null && breakeven < SENSITIVITY_MAX_RATE
+
+  // Stretch the domain far enough to contain the crossing, but not so far that
+  // a lightly-geared portfolio flattens the curve into a horizontal line.
+  const maxRate =
+    markBreakeven && breakeven > 4.5
+      ? Math.min(SENSITIVITY_MAX_RATE, Math.ceil(breakeven + 0.5))
+      : 5
+
+  const lineData = Array.from({ length: Math.round(maxRate / 0.5) + 1 }, (_, i) => {
     const rateDelta = i * 0.5
-    const additionalCost = snap.total_debt * (rateDelta / 100) / 12
+    const additionalCost = (snap.total_debt * (rateDelta / 100)) / 12
     const projected = snap.monthly_cashflow - additionalCost
-    return { rate: `+${rateDelta.toFixed(1)}%`, cashflow: Math.round(projected) }
+    return { rateDelta, cashflow: Math.round(projected) }
   })
+
+  const rateTicks = Array.from({ length: maxRate + 1 }, (_, i) => i)
 
   const categories: { key: keyof RiskProfile; label: string }[] = [
     { key: 'interest_rate', label: 'Interest Rate Risk' },
@@ -189,18 +235,47 @@ export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: s
         <ChartContainer config={sensitivityChartConfig} className="aspect-auto h-[200px] w-full">
           <LineChart accessibilityLayer data={lineData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
             <CartesianGrid vertical={false} />
-            <XAxis dataKey="rate" tickLine={false} axisLine={false} tickMargin={8} />
+            <XAxis
+              dataKey="rateDelta"
+              type="number"
+              domain={[0, maxRate]}
+              ticks={rateTicks}
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tickFormatter={(v) => `+${v}%`}
+            />
             <YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(v) => `$${v}`} />
             <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent valueFormatter={(v) => `${fmtMoney(Number(v))}/mo`} />}
+              cursor={CHART_CROSSHAIR}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(l) => `+${Number(l).toFixed(1)}% on current rates`}
+                  valueFormatter={(v) => `${fmtMoney(Number(v))}/mo`}
+                />
+              }
             />
-            <ReferenceLine
-              y={0}
-              stroke="var(--color-chart-negative)"
-              strokeDasharray="4 4"
-              label={{ value: 'Break-even', position: 'right', fontSize: 10, fill: 'var(--color-chart-negative)' }}
-            />
+            {/* Zero cashflow — the level the curve is heading for. Unlabelled,
+                because the labelled answer is where it crosses, below. */}
+            <ReferenceLine y={0} stroke="var(--color-muted-foreground)" strokeDasharray="4 4" />
+            {/* The question this chart exists to answer: the rate rise that
+                takes the portfolio cashflow-negative. */}
+            {markBreakeven && (
+              <ReferenceLine
+                x={breakeven}
+                stroke="var(--color-status-critical)"
+                strokeDasharray="4 4"
+                label={{
+                  value: `Break-even +${breakeven.toFixed(2)}%`,
+                  // The label is right-aligned to the line, so an early
+                  // break-even runs it off the plot and over the y-axis ticks.
+                  // Flip it to extend rightward in the left half instead.
+                  position: breakeven < maxRate / 2 ? 'insideTopLeft' : 'insideTopRight',
+                  fontSize: 10,
+                  fill: 'var(--color-status-critical)',
+                }}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="cashflow"
@@ -259,6 +334,7 @@ export default function RiskTab({ riskProfile, sensitivity, portfolioSnapshot: s
                   tickFormatter={(v) => '$' + (Number(v) / 1000).toFixed(0) + 'k'}
                 />
                 <ChartTooltip
+                  cursor={CHART_CROSSHAIR}
                   content={
                     <ChartTooltipContent
                       labelFormatter={(l) => `Year ${l}`}

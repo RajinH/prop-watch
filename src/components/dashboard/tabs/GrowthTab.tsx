@@ -9,6 +9,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart'
 import type { CapitalGrowthSummary, AcquisitionCapacity, PortfolioHistoryPoint } from '@/lib/propwatch/engine/types'
+import { CHART_CROSSHAIR } from '@/lib/propwatch/chartPalette'
 
 interface Props {
   capitalGrowth: CapitalGrowthSummary
@@ -28,10 +29,10 @@ const HISTORY_METRICS: { id: HistoryMetric; label: string; format: (v: number) =
 // One series per selectable metric — only the active one is rendered, but naming
 // them all here lets the tooltip resolve a human label for whichever is showing.
 const historyChartConfig = {
-  total_equity: { label: 'Equity', color: 'var(--color-chart-1)' },
-  weighted_lvr: { label: 'LVR', color: 'var(--color-chart-1)' },
-  monthly_cashflow: { label: 'Cashflow', color: 'var(--color-chart-1)' },
-  yield: { label: 'Yield', color: 'var(--color-chart-1)' },
+  total_equity: { label: 'Equity', color: 'var(--color-series-1)' },
+  weighted_lvr: { label: 'LVR', color: 'var(--color-series-1)' },
+  monthly_cashflow: { label: 'Cashflow', color: 'var(--color-series-1)' },
+  yield: { label: 'Yield', color: 'var(--color-series-1)' },
 } satisfies ChartConfig
 
 function fmt(n: number) {
@@ -208,7 +209,7 @@ export default function GrowthTab({ capitalGrowth, acquisitionCapacity, portfoli
                 tickFormatter={(v) => metric.format(Number(v))}
               />
               <ChartTooltip
-                cursor={false}
+                cursor={CHART_CROSSHAIR}
                 content={
                   <ChartTooltipContent
                     valueFormatter={(v) => metric.format(Number(v))}

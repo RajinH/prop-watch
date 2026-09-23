@@ -73,7 +73,7 @@ These principles explain design decisions you'll otherwise find surprising:
 | Styling        | Tailwind CSS v4 (green-forward brand palette) |
 | Data / auth    | **Supabase** (Postgres, Auth, Row-Level Security) via `@supabase/ssr` |
 | Validation     | Zod (all API route inputs) |
-| Charts         | **shadcn/ui charts** (`components/ui/chart.tsx`) — a theming layer over Recharts. Always build charts with `ChartContainer` + a `ChartConfig`; never import Recharts' `ResponsiveContainer`/`Tooltip` directly. Colours come from the `--chart-*` tokens in `globals.css`. |
+| Charts         | **shadcn/ui charts** (`components/ui/chart.tsx`) — a theming layer over Recharts. Always build charts with `ChartContainer` + a `ChartConfig`; never import Recharts' `ResponsiveContainer`/`Tooltip` directly. Colours come from the role-named tokens in `globals.css`: `--color-series-*` for series identity (assign via `lib/propwatch/chartPalette.ts` — keyed by entity id, never by loop index, and folded into "Other" past 6), `--color-seq-*` for magnitude, `--color-status-*` for state. The series slots are validated for colour-vision separation; any chart drawing 3+ of them must also carry direct labels or a legend. |
 | Icons          | lucide-react, @radix-ui/react-icons |
 | Tests          | Vitest (engine unit tests) |
 

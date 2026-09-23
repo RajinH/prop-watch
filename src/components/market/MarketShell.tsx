@@ -17,6 +17,7 @@ import PageHero from '@/components/ui/PageHero'
 import InfoTooltip from '@/components/ui/InfoTooltip'
 import StaticMap from '@/components/properties/StaticMap'
 import { formatCurrencyShort } from '@/lib/formatters'
+import { assignSeriesColors, CHART_CROSSHAIR } from '@/lib/propwatch/chartPalette'
 import { SUBURB_ZOOM } from '@/lib/propwatch/map/tiles'
 import { computeSaleHistoryGrowth, buildSaleTimeline } from '@/lib/propwatch/engine/computeSaleHistory'
 import type {
@@ -108,13 +109,119 @@ interface Props {
 }
 
 // Four suburbs is the realistic ceiling before a multi-series line chart stops
-// being readable; the palette maps onto the brand chart ramp in globals.css.
-const SERIES_COLORS = [
-  'var(--color-chart-1)',
-  'var(--color-chart-2)',
-  'var(--color-chart-4)',
-  'var(--color-chart-5)',
-]
+// being readable. Colour comes from the area id rather than the loop index, so
+// the suburb that was orange last render is orange this render too.
+
+
+/** "2019-03" or "2019-03-01" -> "Mar 2019". Falls back to the raw string. */
+function formatIndexMonth(month: string): string {
+  const [year, m] = month.split('-')
+  const date = new Date(Number(year), Number(m) - 1, 1)
+  if (!year || !m || Number.isNaN(date.getTime())) return month
+  return date.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })
+}
+
+interface SparkPoint {
+  month: string
+  v: number | undefined
+}
+
+/**
+ * The suburb's price index as a hoverable sparkline.
+ *
+ * The readout sits in the caption row rather than in a floating tooltip. Two
+ * reasons: the card clips its own overflow, so a popup anchored to a 3rem-tall
+ * chart would be cut off; and at this size the popup would cover the line it is
+ * describing. Keeping it inline also means the latest value is on screen before
+ * anyone hovers — the hover moves the readout, it does not gate it.
+ *
+ * `ChartTooltip` is still mounted with null content: it is what drives the
+ * crosshair and the active dot. `select-none` stays because dragging across the
+ * SVG used to highlight it as text.
+ */
+function PriceIndexSpark({
+  points,
+  color,
+  caption,
+  baseline,
+  gradientId,
+}: {
+  points: SparkPoint[]
+  color: string
+  caption: string
+  baseline: string | null
+  gradientId: string
+}) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+
+  const shown = (activeIndex !== null ? points[activeIndex] : undefined) ?? points[points.length - 1]
+  const value = shown?.v
+  // The series is rebased to 100 at `baseline`, so the index reads directly as
+  // a percentage move since that month.
+  const sinceBaseline = typeof value === 'number' ? value - 100 : null
+
+  return (
+    <div className="mt-auto pt-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          {caption}
+        </p>
+        {shown && typeof value === 'number' && (
+          <p className="shrink-0 text-[11px] tabular-nums text-slate-500">
+            <span className="text-slate-400">{formatIndexMonth(shown.month)}</span>{' '}
+            <span className="font-semibold text-slate-700">{value.toFixed(1)}</span>
+            {sinceBaseline !== null && baseline && (
+              <span className={sinceBaseline >= 0 ? 'text-green-700' : 'text-red-600'}>
+                {' '}
+                {sinceBaseline >= 0 ? '+' : ''}
+                {Math.round(sinceBaseline)}%
+              </span>
+            )}
+          </p>
+        )}
+      </div>
+      <ChartContainer
+        config={{ v: { label: 'Price index', color } }}
+        className="mt-1 h-12 w-full select-none"
+      >
+        <AreaChart
+          accessibilityLayer
+          data={points}
+          margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+          // Recharts types activeTooltipIndex as `number | TooltipIndex`, and
+          // TooltipIndex is `string | null` — it arrives as a string here, so
+          // coerce rather than narrowing on `typeof === 'number'`.
+          onMouseMove={(state) => {
+            const i = Number(state.activeTooltipIndex)
+            setActiveIndex(state.isTooltipActive && Number.isInteger(i) ? i : null)
+          }}
+          onMouseLeave={() => setActiveIndex(null)}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <ChartTooltip
+            content={() => null}
+            cursor={CHART_CROSSHAIR}
+          />
+          <Area
+            dataKey="v"
+            type="monotone"
+            stroke={color}
+            strokeWidth={1.5}
+            fill={`url(#${gradientId})`}
+            dot={false}
+            activeDot={{ r: 4, fill: color, stroke: '#ffffff', strokeWidth: 2 }}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ChartContainer>
+    </div>
+  )
+}
 
 /**
  * How far annualised growth must diverge from its longer-run average before we
@@ -163,8 +270,12 @@ export default function MarketShell({
 
   const areaIds = [...new Set(properties.map((p) => p.area_id).filter(Boolean))] as string[]
 
+  const areaColor = assignSeriesColors(areaIds)
+  // Concentration buckets are a separate entity set from the suburb series, so
+  // they get their own stable assignment rather than borrowing the area map.
+  const bucketColor = assignSeriesColors(concentration.map((c) => c.key))
   const chartConfig = Object.fromEntries(
-    areaIds.map((id, i) => [id, { label: areaLabel(id), color: SERIES_COLORS[i % SERIES_COLORS.length] }])
+    areaIds.map((id) => [id, { label: areaLabel(id), color: areaColor[id] }])
   ) satisfies ChartConfig
 
   const multiProperty = concentration.filter((c) => c.property_count > 1)
@@ -212,27 +323,31 @@ export default function MarketShell({
           </p>
         </div>
 
+        {/* Touching fills are separated by a 2px surface gap rather than a
+            stroke, so adjacent segments stay distinct without a border. */}
         <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-slate-100">
           {concentration.map((c, i) => (
-            <div
-              key={c.key}
-              className="h-full transition-opacity hover:opacity-80"
-              style={{
-                width: `${c.share * 100}%`,
-                background: SERIES_COLORS[i % SERIES_COLORS.length],
-              }}
-              title={`${c.label}: ${formatCurrencyShort(c.value)}`}
-            />
+            <div key={c.key} className="contents">
+              {i > 0 && <div className="h-full w-0.5 shrink-0 bg-white" />}
+              <div
+                className="h-full transition-opacity hover:opacity-80"
+                style={{
+                  width: `${c.share * 100}%`,
+                  background: bucketColor[c.key],
+                }}
+                title={`${c.label}: ${formatCurrencyShort(c.value)}`}
+              />
+            </div>
           ))}
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {concentration.map((c, i) => (
+          {concentration.map((c) => (
             <div key={c.key} className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }}
+                  style={{ background: bucketColor[c.key] }}
                 />
                 <span className="text-xs font-semibold text-slate-700">{c.label}</span>
               </div>
@@ -309,13 +424,13 @@ export default function MarketShell({
               />
               {/* 100 is the rebase point: above it the market grew, below it fell. */}
               <ReferenceLine y={100} stroke="var(--color-border)" strokeDasharray="3 3" />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              {areaIds.map((id, i) => (
+              <ChartTooltip cursor={CHART_CROSSHAIR} content={<ChartTooltipContent />} />
+              {areaIds.map((id) => (
                 <Line
                   key={id}
                   dataKey={id}
                   type="monotone"
-                  stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
+                  stroke={areaColor[id]}
                   strokeWidth={activeArea === id ? 2.5 : 1.5}
                   strokeOpacity={activeArea === null || activeArea === id ? 1 : 0.2}
                   dot={false}
@@ -329,7 +444,7 @@ export default function MarketShell({
               market in the chart above. Deliberately pinless and zoomed out —
               these stand for a whole suburb, not an address. */}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {areaIds.map((id, i) => {
+            {areaIds.map((id) => {
               const anchor = properties.find((p) => p.area_id === id)
               const g = growth.find((x) => x.area_id === id)
               const window = [...(g?.windows ?? [])].reverse().find((w) => w.price_growth !== null)
@@ -360,7 +475,7 @@ export default function MarketShell({
                     <span className="flex min-w-0 items-center gap-1.5">
                       <span
                         className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }}
+                        style={{ background: areaColor[id] }}
                       />
                       <span className="truncate text-xs font-semibold text-slate-700">
                         {areaLabel(id)}
@@ -719,8 +834,7 @@ export default function MarketShell({
             const rentGap = marketRent !== null ? marketRent - p.monthly_rent : null
             const beat = cmp?.divergence !== null && cmp?.divergence !== undefined && cmp.divergence > 0
 
-            const areaIdx = areaIds.indexOf(p.area_id ?? '')
-            const seriesColor = SERIES_COLORS[(areaIdx < 0 ? 0 : areaIdx) % SERIES_COLORS.length]
+            const seriesColor = (p.area_id ? areaColor[p.area_id] : null) ?? 'var(--color-series-1)'
             const spark = p.area_id
               ? priceIndex
                   .map((row) => ({ month: String(row.month), v: row[p.area_id!] as number | undefined }))
@@ -778,40 +892,13 @@ export default function MarketShell({
                     {/* The suburb's own trajectory, so the card carries a trend
                         and not just a pair of end points. */}
                     {spark.length > 1 && (
-                      <div className="mt-auto pt-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                          {areaLabel(p.area_id)} price index
-                        </p>
-                        {/* Decorative: no tooltip, no hover dot, and not
-                            selectable — clicking it was highlighting the SVG as
-                            text and popping a stray active dot. */}
-                        <ChartContainer
-                          config={{ v: { label: 'Price index', color: seriesColor } }}
-                          className="pointer-events-none mt-1 h-12 w-full select-none"
-                        >
-                          <AreaChart
-                            data={spark}
-                            margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
-                          >
-                            <defs>
-                              <linearGradient id={`spark-${p.id}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={seriesColor} stopOpacity={0.28} />
-                                <stop offset="100%" stopColor={seriesColor} stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <Area
-                              dataKey="v"
-                              type="monotone"
-                              stroke={seriesColor}
-                              strokeWidth={1.5}
-                              fill={`url(#spark-${p.id})`}
-                              dot={false}
-                              activeDot={false}
-                              isAnimationActive={false}
-                            />
-                          </AreaChart>
-                        </ChartContainer>
-                      </div>
+                      <PriceIndexSpark
+                        points={spark}
+                        color={seriesColor}
+                        caption={`${areaLabel(p.area_id)} price index`}
+                        baseline={indexBaseline}
+                        gradientId={`spark-${p.id}`}
+                      />
                     )}
                   </div>
                 </div>
@@ -922,12 +1009,13 @@ export default function MarketShell({
                         </div>
                         <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
                           <div
-                            className="h-full bg-[var(--color-chart-2)]"
+                            className="h-full bg-[var(--color-series-1)]"
                             style={{
                               width: `${Math.max(0, Math.min(100, ((cmp.market_driven_gain ?? 0) / cmp.value_gain) * 100))}%`,
                             }}
                           />
-                          <div className="h-full flex-1 bg-[var(--color-chart-5)]" />
+                          <div className="h-full w-0.5 shrink-0 bg-white" />
+                          <div className="h-full flex-1 bg-[var(--color-series-2)]" />
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-slate-500">

@@ -14,6 +14,10 @@
  *     replaces the whole row, losing the colour indicator).
  *   - Tooltip rows render a value of `0` (upstream's truthiness check hides it,
  *     which matters for signed metrics like cashflow).
+ *   - The tooltip label accepts a NUMERIC axis value. Upstream only resolves
+ *     `label` when it is a string, so on an `XAxis type="number"` it silently
+ *     falls through to the series' config label — a `labelFormatter` then
+ *     formats the series name instead of the x value (`+NaN%`, `Year Bondi`).
  */
 
 import * as React from "react"
@@ -178,8 +182,8 @@ const ChartTooltipContent = React.forwardRef<
       const key = `${labelKey || item?.dataKey || item?.name || "value"}`
       const itemConfig = getPayloadConfigFromPayload(config, item, key)
       const value =
-        !labelKey && typeof label === "string"
-          ? config[label as keyof typeof config]?.label || label
+        !labelKey && (typeof label === "string" || typeof label === "number")
+          ? config[label as keyof typeof config]?.label ?? label
           : itemConfig?.label
 
       if (labelFormatter) {
@@ -190,7 +194,8 @@ const ChartTooltipContent = React.forwardRef<
         )
       }
 
-      if (!value) {
+      // Not `!value`: a numeric axis label of 0 is a real label.
+      if (value === undefined || value === null || value === "") {
         return null
       }
 

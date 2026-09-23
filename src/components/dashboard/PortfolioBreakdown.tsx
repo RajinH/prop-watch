@@ -2,23 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import {
-  BarChart,
-  Bar,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ReferenceLine,
-  LabelList,
-} from 'recharts'
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from '@/components/ui/chart'
 import { ChevronDown, ChevronRight, ArrowRight } from 'lucide-react'
 import type {
   Property,
@@ -34,37 +17,38 @@ interface Props {
   rankedProperties: PropertyRank[]
 }
 
-type Metric = 'value' | 'debt' | 'cashflow' | 'exposure'
+/*
+ * Two views, not four.
+ *
+ * Value, debt and exposure were never independent metrics: per property
+ * `debt + equity = value`, so one stacked bar carries all three at once — the
+ * bar's length is the value, its split is the LVR, and its share of the widest
+ * row is the exposure. Toggling between them showed one at a time and asked the
+ * reader to hold the other two in their head.
+ *
+ * Cashflow is the one measure that genuinely does not belong in that stack: it
+ * is signed and unrelated to the value axis, so it gets a diverging view.
+ */
+type Metric = 'composition' | 'cashflow'
 
-const METRICS: { id: Metric; label: string; tooltipLabel: string; caption: string }[] = [
+const METRICS: { id: Metric; label: string; caption: string }[] = [
   {
-    id: 'value',
-    label: 'Value',
-    tooltipLabel: 'Value',
-    caption: 'Estimated current market value of each property.',
-  },
-  {
-    id: 'debt',
-    label: 'Debt',
-    tooltipLabel: 'Debt',
-    caption: 'Outstanding loan balance owing on each property.',
+    id: 'composition',
+    label: 'Composition',
+    caption: 'What each property is worth, split into what you owe and what you own.',
   },
   {
     id: 'cashflow',
     label: 'Cashflow/mo',
-    tooltipLabel: 'Cashflow/mo',
     caption: 'Net monthly cashflow per property — rent less repayments and expenses.',
-  },
-  {
-    id: 'exposure',
-    label: 'Exposure',
-    tooltipLabel: 'Exposure',
-    caption: "Each property's share of total portfolio value.",
   },
 ]
 
-const BAR_COLOR = 'var(--color-chart-2)'
-const BAR_COLOR_NEG = 'var(--color-chart-negative)'
+// Debt and equity are two parts of one whole, so they take categorical slots —
+// debt is not an error state, and colouring it as one would misread a healthy
+// 38% LVR as a warning.
+const DEBT_COLOR = 'var(--color-series-2)'
+const EQUITY_COLOR = 'var(--color-series-1)'
 
 const RANK_BADGES: Record<number, string> = {
   1: 'bg-yellow-100 text-yellow-700 border border-yellow-200',
@@ -80,79 +64,44 @@ function pct(n: number | null) {
   return n !== null ? (n * 100).toFixed(1) + '%' : '—'
 }
 
-// Pronounced, clickable property name rendered above each bar. Navigates to the
-// properties page on click. Rendered as a LabelList content element so recharts
-// treats it as a real component (hooks are valid here).
-function BarNameLabel(props: { x?: number; y?: number; value?: string | number }) {
-  const { x = 0, y = 0, value } = props
-  const router = useRouter()
-  return (
-    <text
-      x={x}
-      y={y}
-      dy={-7}
-      textAnchor="start"
-      role="link"
-      onClick={() => router.push('/properties')}
-      className="cursor-pointer fill-slate-800 text-[13px] font-semibold transition-colors hover:fill-green-700 hover:underline"
-    >
-      {value}
-    </text>
-  )
-}
-
 export default function PortfolioBreakdown({
   portfolioSnapshot: snap,
   properties,
   propertySnapshots,
   rankedProperties,
 }: Props) {
-  const [metric, setMetric] = useState<Metric>('value')
+  const [metric, setMetric] = useState<Metric>('composition')
   const [showTable, setShowTable] = useState(false)
 
   if (properties.length === 0) return null
 
   const rankMap = new Map(rankedProperties.map((r) => [r.property_id, r]))
 
-  const rows = properties.map((p) => {
-    const s = propertySnapshots[p.id]
-    const exposure = snap.total_value > 0 ? p.current_value / snap.total_value : 0
-    return {
-      id: p.id,
-      name: p.name,
-      value: p.current_value,
-      debt: p.current_debt,
-      cashflow: s?.monthly_cashflow ?? 0,
-      exposure,
-    }
-  })
-
-  const isExposure = metric === 'exposure'
-  const isCashflow = metric === 'cashflow'
+  // One stable order for both views. Sorting by the active metric meant the
+  // rows reshuffled every time you switched, so you lost your place.
+  const rows = properties
+    .map((p) => {
+      const s = propertySnapshots[p.id]
+      const equity = p.current_value - p.current_debt
+      return {
+        id: p.id,
+        name: p.name,
+        value: p.current_value,
+        debt: p.current_debt,
+        equity,
+        lvr: s?.lvr ?? (p.current_value > 0 ? p.current_debt / p.current_value : null),
+        cashflow: s?.monthly_cashflow ?? 0,
+        exposure: snap.total_value > 0 ? p.current_value / snap.total_value : 0,
+      }
+    })
+    .sort((a, b) => b.value - a.value)
 
   const activeMetric = METRICS.find((m) => m.id === metric)!
 
-  // `fill` is carried on the datum so the tooltip indicator picks up the same
-  // colour as the bar (ChartTooltipContent reads item.payload.fill).
-  const chartData = [...rows]
-    .sort((a, b) => b[metric] - a[metric])
-    .map((r) => {
-      const metricValue = isExposure ? r.exposure * 100 : r[metric]
-      return {
-        name: r.name.length > 20 ? r.name.slice(0, 20) + '…' : r.name,
-        metricValue,
-        fill: isCashflow && metricValue < 0 ? BAR_COLOR_NEG : BAR_COLOR,
-      }
-    })
-
-  const chartConfig = {
-    metricValue: { label: activeMetric.tooltipLabel, color: BAR_COLOR },
-  } satisfies ChartConfig
-
-  const formatAxis = (v: number) => (isExposure ? `${v.toFixed(0)}%` : fmt(v))
-  const formatTooltip = (v: number) =>
-    isExposure ? `${Number(v).toFixed(1)}%` : fmt(Number(v))
-  const chartHeight = Math.max(180, chartData.length * 56 + 28)
+  // Bars are measured against the widest row, so the longest bar fills the
+  // track and every other row reads as a share of it.
+  const maxValue = Math.max(...rows.map((r) => r.value), 0)
+  const maxAbsCashflow = Math.max(...rows.map((r) => Math.abs(r.cashflow)), 1)
 
   return (
     <div className="flex flex-col gap-4">
@@ -179,46 +128,120 @@ export default function PortfolioBreakdown({
         </div>
       </div>
 
-      {/* Unified horizontal bar chart */}
+      {/* Rows are HTML, not SVG. The property name can then be a real link to
+          that property rather than SVG <text> with an onClick — the old labels
+          were unreachable by keyboard and every one of them navigated to the
+          same page. The numbers live in the row, so the bars are decorative and
+          nothing is readable only by hovering. */}
       <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <ChartContainer
-          config={chartConfig}
-          className="aspect-auto w-full"
-          style={{ height: chartHeight }}
-        >
-          <BarChart
-            accessibilityLayer
-            data={chartData}
-            layout="vertical"
-            margin={{ top: 18, right: 16, bottom: 4, left: 4 }}
-          >
-            <CartesianGrid horizontal={false} />
-            <XAxis
-              type="number"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tickFormatter={formatAxis}
-            />
-            <YAxis type="category" dataKey="name" hide />
-            <ChartTooltip
-              cursor={{ fill: 'var(--color-muted)' }}
-              content={
-                <ChartTooltipContent
-                  valueFormatter={(v) => formatTooltip(Number(v))}
-                  labelFormatter={(_l, payload) => payload?.[0]?.payload?.name ?? ''}
-                />
-              }
-            />
-            {isCashflow && <ReferenceLine x={0} stroke="var(--color-muted-foreground)" strokeDasharray="4 4" />}
-            <Bar dataKey="metricValue" radius={[0, 4, 4, 0]} barSize={18}>
-              {chartData.map((entry) => (
-                <Cell key={entry.name} fill={entry.fill} />
-              ))}
-              <LabelList dataKey="name" content={<BarNameLabel />} />
-            </Bar>
-          </BarChart>
-        </ChartContainer>
+        {metric === 'composition' && (
+          <div className="mb-4 flex items-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 rounded-sm"
+                style={{ background: DEBT_COLOR }}
+              />
+              Debt
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 rounded-sm"
+                style={{ background: EQUITY_COLOR }}
+              />
+              Equity
+            </span>
+          </div>
+        )}
+
+        <ul className="flex flex-col">
+          {rows.map((r) => {
+            const share = maxValue > 0 ? r.value / maxValue : 0
+            const debtShare = r.value > 0 ? Math.min(1, Math.max(0, r.debt / r.value)) : 0
+            const underwater = r.equity < 0
+            const cashflowShare = Math.min(1, Math.abs(r.cashflow) / maxAbsCashflow)
+
+            return (
+              <li key={r.id}>
+                <Link
+                  href={`/properties/${r.id}/edit`}
+                  className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-lg px-2 py-2.5 transition-colors hover:bg-slate-50 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto]"
+                >
+                  <span className="truncate text-sm font-medium text-slate-800 group-hover:text-green-800">
+                    {r.name}
+                  </span>
+
+                  {metric === 'composition' ? (
+                    <span className="col-span-2 col-start-1 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1 flex h-5 overflow-hidden rounded bg-slate-100" aria-hidden>
+                      <span className="flex h-full" style={{ width: `${share * 100}%` }}>
+                        <span
+                          className="h-full"
+                          style={{ width: `${debtShare * 100}%`, background: DEBT_COLOR }}
+                        />
+                        {debtShare > 0 && debtShare < 1 && (
+                          <span className="h-full w-0.5 shrink-0 bg-white" />
+                        )}
+                        <span className="h-full flex-1" style={{ background: EQUITY_COLOR }} />
+                      </span>
+                    </span>
+                  ) : (
+                    // Diverging around zero: the centre line is the baseline, so
+                    // direction carries the sign as well as colour.
+                    <span className="col-span-2 col-start-1 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1 relative flex h-5 items-center" aria-hidden>
+                      <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-200" />
+                      <span className="flex h-full w-1/2 justify-end">
+                        {r.cashflow < 0 && (
+                          <span
+                            className="h-full rounded-l"
+                            style={{
+                              width: `${cashflowShare * 100}%`,
+                              background: 'var(--color-chart-negative)',
+                            }}
+                          />
+                        )}
+                      </span>
+                      <span className="flex h-full w-1/2">
+                        {r.cashflow >= 0 && (
+                          <span
+                            className="h-full rounded-r"
+                            style={{
+                              width: `${cashflowShare * 100}%`,
+                              background: 'var(--color-chart-positive)',
+                            }}
+                          />
+                        )}
+                      </span>
+                    </span>
+                  )}
+
+                  {metric === 'composition' ? (
+                    <span className="col-start-2 row-start-1 sm:col-start-3 flex flex-col items-end">
+                      <span className="text-sm font-semibold tabular-nums text-slate-800">
+                        {fmt(r.value)}
+                      </span>
+                      <span
+                        className={`text-xs tabular-nums ${underwater ? 'text-red-600' : 'text-slate-400'}`}
+                      >
+                        {underwater ? 'Debt > value' : `LVR ${pct(r.lvr)}`}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="col-start-2 row-start-1 sm:col-start-3 flex flex-col items-end">
+                      <span
+                        className={`text-sm font-semibold tabular-nums ${r.cashflow < 0 ? 'text-red-600' : 'text-green-700'}`}
+                      >
+                        {r.cashflow >= 0 ? '+' : '-'}
+                        {fmt(r.cashflow)}
+                      </span>
+                      <span className="text-xs tabular-nums text-slate-400">
+                        {pct(r.exposure)} of value
+                      </span>
+                    </span>
+                  )}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
       </div>
 
       {/* Expandable detail table */}
@@ -295,8 +318,13 @@ export default function PortfolioBreakdown({
                           {pct(s?.lvr ?? null)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                        {s ? fmt(s.equity) : '—'}
+                      <td
+                        className={`px-4 py-3 whitespace-nowrap ${s && s.equity < 0 ? 'text-red-600' : 'text-slate-600'}`}
+                      >
+                        {/* fmt() prints the absolute value, so the sign has to be
+                            restored here — equity goes negative when debt
+                            exceeds value. */}
+                        {s ? (s.equity < 0 ? '-' : '') + fmt(s.equity) : '—'}
                       </td>
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                         {fmt(p.monthly_rent)}

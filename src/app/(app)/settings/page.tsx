@@ -4,6 +4,7 @@ import { getAccess } from '@/lib/propwatch/access/getAccess'
 import ManageBillingButton from '@/components/billing/ManageBillingButton'
 import UserInfoCard from '@/components/auth/UserInfoCard'
 import GoalEditor from '@/components/settings/GoalEditor'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 export const metadata = {
   title: 'Settings',
@@ -58,6 +59,14 @@ export default async function SettingsPage() {
           </Link>
         </div>
       )}
+
+      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <h2 className="font-semibold text-slate-900">Appearance</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Choose how PropWatch looks. Saved on this device.
+        </p>
+        <ThemeToggle />
+      </div>
 
       {user && <UserInfoCard user={user} session={session} />}
     </div>
