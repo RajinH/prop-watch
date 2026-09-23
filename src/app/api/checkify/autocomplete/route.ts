@@ -1,6 +1,7 @@
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import { checkifyAutocomplete, type CheckifyCountry } from '@/lib/propwatch/checkify/server'
+import { metered, usageDenied } from '@/lib/propwatch/usage/server'
 
 export async function GET(request: Request) {
   const { user, access } = await getSupabaseWithPaidUser(request)
@@ -15,7 +16,11 @@ export async function GET(request: Request) {
   if (query.length < 3) return ok({})
 
   try {
-    return ok(await checkifyAutocomplete(query, country))
+    const result = await metered(user.id, 'checkify', '/autocomplete', async () => ({
+      data: await checkifyAutocomplete(query, country),
+      cost: null,
+    }))
+    return result.ok ? ok(result.data) : usageDenied(result.reason)
   } catch {
     return err('Address lookup failed', 502)
   }

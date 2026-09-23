@@ -229,6 +229,16 @@ outside the dev routes, and both are called only by `PropertyWizard`:
 | `/address/geocode` | user picks an address from Checkify autocomplete | **$0.031** per address |
 | `/property/estimates` | user clicks *Prefill* | free tier, 1 unit |
 
+Both routes (and the two Checkify routes) are metered through
+`usage/server.ts`: each call claims a row in `api_usage` first, which enforces a
+per-user limit over a rolling 24 hours (HTAG 40, Checkify 400) and a monthly
+ceiling in Sydney time (HTAG spend `HTAG_MONTHLY_BUDGET_AUD`, default $20;
+Checkify calls `CHECKIFY_MONTHLY_CALL_LIMIT`, default 5,000). The row is then
+settled with the real `x-billing-cost`. A refused call returns 429 and the
+wizard falls back to manual entry. The ledger needs `SUPABASE_SECRET_KEY`; without
+it every lookup fails closed with 503. A balance below `HTAG_LOW_BALANCE_AUD`
+(default $10) logs `[htag:low-balance]`.
+
 In development, set `HTAG_MOCK=1` (in `.env.development.local`) to serve both from
 `htag/mock.ts` instead: the geocode mock echoes the entered address back as a
 matching candidate plus a same-street decoy, estimates are deterministic per

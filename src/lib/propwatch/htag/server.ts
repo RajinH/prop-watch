@@ -106,6 +106,10 @@ async function htagRequest<T>(
   // dev file logger only captures the first console argument, so an object
   // payload reaches the terminal but is written to the log as `{}`.
   console.log(`[htag:billing] ${JSON.stringify(meta)}`)
+  const lowBalance = Number(process.env.HTAG_LOW_BALANCE_AUD ?? 10)
+  if (meta.balance !== null && meta.balance < lowBalance) {
+    console.warn(`[htag:low-balance] balance $${meta.balance} is below $${lowBalance}; top up HTAG`)
+  }
 
   return { data: (await res.json()) as T, meta }
 }
@@ -122,24 +126,31 @@ export async function htagGetWithMeta<T>(
   return htagRequest<T>(path, params)
 }
 
-async function htagGet<T>(path: string, params: HtagParams): Promise<T> {
-  return (await htagRequest<T>(path, params)).data
+/** A typed wrapper's result: the body plus the AUD charged, for usage metering. */
+export interface HtagResult<T> {
+  data: T
+  cost: number | null
+}
+
+async function htagGetCosted<T>(path: string, params: HtagParams): Promise<HtagResult<T>> {
+  const { data, meta } = await htagRequest<T>(path, params)
+  return { data, cost: meta.cost }
 }
 
 /** Geocode a free-text address to get candidate address_keys with similarity scores. */
-export function htagGeocodeAddress(address: string): Promise<HtagGeocodeResult> {
+export function htagGeocodeAddress(address: string): Promise<HtagResult<HtagGeocodeResult>> {
   if (isHtagMockEnabled()) {
     console.log('[htag:mock] /address/geocode')
-    return Promise.resolve(mockGeocode(address))
+    return Promise.resolve({ data: mockGeocode(address), cost: 0 })
   }
-  return htagGet<HtagGeocodeResult>('/address/geocode', { address })
+  return htagGetCosted<HtagGeocodeResult>('/address/geocode', { address })
 }
 
 /** Fetch price/rent estimates and transaction history for a resolved address_key. */
-export function htagPropertyEstimates(address_key: string): Promise<HtagEstimatesResult> {
+export function htagPropertyEstimates(address_key: string): Promise<HtagResult<HtagEstimatesResult>> {
   if (isHtagMockEnabled()) {
     console.log('[htag:mock] /property/estimates')
-    return Promise.resolve(mockEstimates(address_key))
+    return Promise.resolve({ data: mockEstimates(address_key), cost: 0 })
   }
-  return htagGet<HtagEstimatesResult>('/property/estimates', { address_key })
+  return htagGetCosted<HtagEstimatesResult>('/property/estimates', { address_key })
 }

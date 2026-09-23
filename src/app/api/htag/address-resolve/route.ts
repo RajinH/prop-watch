@@ -1,6 +1,7 @@
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import { htagGeocodeAddress } from '@/lib/propwatch/htag/server'
+import { metered, usageDenied } from '@/lib/propwatch/usage/server'
 
 export async function GET(request: Request) {
   const { user, access } = await getSupabaseWithPaidUser(request)
@@ -11,7 +12,10 @@ export async function GET(request: Request) {
   if (!address) return err('address is required', 400)
 
   try {
-    return ok(await htagGeocodeAddress(address))
+    const result = await metered(user.id, 'htag', '/address/geocode', () =>
+      htagGeocodeAddress(address)
+    )
+    return result.ok ? ok(result.data) : usageDenied(result.reason)
   } catch {
     return err('Address resolution failed', 502)
   }

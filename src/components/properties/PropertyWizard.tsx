@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MapPin, WandSparkles } from 'lucide-react'
-import { apiPost, apiPatch, apiGet } from '@/lib/propwatch/api/client'
+import { apiPost, apiPatch, apiGet, ApiError } from '@/lib/propwatch/api/client'
 import { useToast } from '@/components/ui/ToastProvider'
 import { formatCurrencyShort } from '@/lib/formatters'
 import AddressAutocomplete, { type AddressFields } from './AddressAutocomplete'
@@ -100,6 +100,11 @@ interface FormState {
 type HtagCandidate = HtagAddressCandidate
 
 const STEPS = ['Property', 'Loan & Insurance', 'Financials'] as const
+
+/** A usage-cap refusal from the metered HTAG routes; its message is user-facing. */
+function isLimitError(e: unknown): e is ApiError {
+  return e instanceof ApiError && (e.status === 429 || e.status === 503)
+}
 const LAST_STEP = STEPS.length - 1
 
 export default function PropertyWizard({ mode, property }: Props) {
@@ -166,6 +171,9 @@ export default function PropertyWizard({ mode, property }: Props) {
   // Prefill state
   const [prefillLoading, setPrefillLoading] = useState(false)
   const [prefillError, setPrefillError] = useState<string | null>(null)
+  // Set when the server refused an HTAG lookup (usage cap or ledger down), so
+  // the user sees why instead of a generic failure.
+  const [htagLimitMessage, setHtagLimitMessage] = useState<string | null>(null)
 
   function set(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -231,8 +239,10 @@ export default function PropertyWizard({ mode, property }: Props) {
       } else {
         setHtagConflicts(results.slice(0, 4))
       }
-    } catch {
-      // HTAG is best-effort — never surface resolution errors to the user
+    } catch (e) {
+      // HTAG is best-effort: an upstream failure stays silent, but a usage cap
+      // is explained when the user reaches Prefill.
+      if (isLimitError(e)) setHtagLimitMessage(e.message)
     } finally {
       setHtagResolving(false)
     }
@@ -256,7 +266,9 @@ export default function PropertyWizard({ mode, property }: Props) {
   async function handlePrefill() {
     setPrefillError(null)
     if (!form.htag_address_key) {
-      setPrefillError('Address could not be resolved. Enter financial details manually.')
+      setPrefillError(
+        htagLimitMessage ?? 'Address could not be resolved. Enter financial details manually.'
+      )
       return
     }
 
@@ -293,8 +305,10 @@ export default function PropertyWizard({ mode, property }: Props) {
       }
       saveHtagEstimates(form.htag_address_key, entry)
       applyEstimates(entry)
-    } catch {
-      setPrefillError('Could not fetch estimates. Please enter values manually.')
+    } catch (e) {
+      setPrefillError(
+        isLimitError(e) ? e.message : 'Could not fetch estimates. Please enter values manually.'
+      )
     } finally {
       setPrefillLoading(false)
     }

@@ -1,6 +1,7 @@
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import { htagPropertyEstimates } from '@/lib/propwatch/htag/server'
+import { metered, usageDenied } from '@/lib/propwatch/usage/server'
 
 export async function GET(request: Request) {
   const { user, access } = await getSupabaseWithPaidUser(request)
@@ -11,7 +12,10 @@ export async function GET(request: Request) {
   if (!address_key) return err('address_key is required', 400)
 
   try {
-    return ok(await htagPropertyEstimates(address_key))
+    const result = await metered(user.id, 'htag', '/property/estimates', () =>
+      htagPropertyEstimates(address_key)
+    )
+    return result.ok ? ok(result.data) : usageDenied(result.reason)
   } catch {
     return err('Estimates lookup failed', 502)
   }
