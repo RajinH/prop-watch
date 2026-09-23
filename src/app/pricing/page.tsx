@@ -16,7 +16,7 @@ const FEATURES = [
   'Risk profile and rate sensitivity',
   'What-if scenario planning',
   'Capital growth and equity release',
-  'Suburb-level market comparison',
+  // 'Suburb-level market comparison' returns with the Market page after the beta.
 ]
 
 export default async function PricingPage({
@@ -40,13 +40,17 @@ export default async function PricingPage({
   const { flow } = await searchParams
   const flows =
     flow && isFlowKey(flow) ? [FLOWS[flow]] : DEFAULT_FLOWS.map((k) => FLOWS[k])
+  const billing = isStripeConfigured()
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-16">
       <header>
         <h1 className="text-3xl font-black text-slate-900">Unlock your portfolio</h1>
         <p className="mt-1 text-slate-500">
-          You&apos;ve set up your properties. Subscribe to see what they&apos;re actually doing.
+          You&apos;ve set up your properties.{' '}
+          {billing
+            ? 'Subscribe to see what they’re actually doing.'
+            : 'Enter your access code to see what they’re actually doing.'}
         </p>
       </header>
 
@@ -61,11 +65,11 @@ export default async function PricingPage({
           ))}
         </ul>
 
-        {isStripeConfigured() ? (
+        {billing ? (
           <CheckoutButtons flows={flows} />
         ) : (
           <div className="mt-6 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Billing isn&apos;t configured on this environment. Use an access code below.
+            PropWatch is invite-only for now. Enter your access code below.
           </div>
         )}
       </section>
