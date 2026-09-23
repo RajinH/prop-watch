@@ -217,3 +217,25 @@ export type DecisionDimension = {
   headline: { title: string; description: string }
   insightTypes: string[]
 }
+
+export type RunwayScenarioKey = 'current' | 'vacancy' | 'rate_plus_2'
+
+export type RunwayStatus =
+  | 'self_funding'    // scenario cashflow >= 0: the reserve is not being drawn down
+  | 'finite'          // negative cashflow and a known reserve: runway_months is a number
+  | 'unknown_reserve' // negative cashflow but cashReserve is null
+
+export type RunwayScenario = {
+  key: RunwayScenarioKey
+  monthly_cashflow: number        // scenario cashflow (can be negative)
+  monthly_out_of_pocket: number   // max(0, -monthly_cashflow)
+  runway_months: number | null    // null unless status === 'finite'
+  runway_capped: boolean          // true when the value hit RUNWAY_CAP_MONTHS
+  status: RunwayStatus
+}
+
+export type RunwayResult = {
+  cash_reserve: number | null
+  vacancy_property_id: string | null  // the property removed in the vacancy scenario
+  scenarios: RunwayScenario[]         // always in order: current, vacancy, rate_plus_2
+}

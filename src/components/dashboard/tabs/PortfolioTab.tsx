@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { ChevronDown, Hourglass } from 'lucide-react'
 import type {
   Property,
   PortfolioSnapshotInsert,
@@ -11,6 +13,7 @@ import { buildDecisionSurface } from '@/lib/propwatch/engine/decisionSurface'
 import type { InvestorGoal, RunChanges } from '@/lib/propwatch/decision/types'
 import DecisionSurface from '@/components/dashboard/DecisionSurface'
 import PortfolioBreakdown from '@/components/dashboard/PortfolioBreakdown'
+import YourPositionCard from '@/components/dashboard/YourPositionCard'
 import NextBestActionCard from '@/components/decision/NextBestActionCard'
 import AlternativeActionRow from '@/components/decision/AlternativeActionRow'
 import GoalPromptCard from '@/components/decision/GoalPromptCard'
@@ -87,6 +90,11 @@ export default function PortfolioTab({
   const yieldMax = Math.max(6, yieldPct !== null ? Math.ceil(yieldPct + 1) : 6)
 
   const dimensions = buildDecisionSurface(insights)
+
+  // Runway is a drill-down from the cashflow tile: it answers "how long can
+  // my cash cover this?", so it opens from the number it explains.
+  const [showRunway, setShowRunway] = useState(false)
+  const canShowRunway = properties.length > 0
 
   // The primary recommendation is rank 1 only when the engine marked it
   // eligible to lead; blocked/low-confidence actions stay in alternatives.
@@ -169,75 +177,107 @@ export default function PortfolioTab({
 
       {/* Section 1b — Performance. The two numbers that are not part of the
           balance sheet, each shown against the benchmark it is judged by. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Monthly cashflow
-          </p>
-          <div className="mt-1.5 flex items-baseline gap-2">
-            <span
-              className={`text-2xl font-black ${cashflowNegative ? 'text-red-600' : 'text-green-700'}`}
-            >
-              {snap.monthly_cashflow >= 0 ? '+' : '-'}
-              {fmt(snap.monthly_cashflow)}
-            </span>
-            <span className="text-xs text-slate-400">gross</span>
-          </div>
-          {afterTaxCashflow ? (
-            <div className="mt-2 flex items-baseline gap-2">
-              <span
-                className={`text-lg font-black ${
-                  afterTaxCashflow.after_tax_monthly_cashflow >= 0
-                    ? 'text-green-700'
-                    : 'text-red-600'
-                }`}
-              >
-                {afterTaxCashflow.after_tax_monthly_cashflow >= 0 ? '+' : '-'}
-                {fmt(afterTaxCashflow.after_tax_monthly_cashflow)}
-              </span>
-              <span className="text-xs text-slate-400">
-                after tax, at {(afterTaxCashflow.tax_bracket * 100).toFixed(0)}%
-              </span>
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Monthly cashflow
+              </p>
+              {canShowRunway && (
+                <button
+                  type="button"
+                  onClick={() => setShowRunway((v) => !v)}
+                  aria-expanded={showRunway}
+                  aria-controls="runway-panel"
+                  className={`-mr-1.5 -mt-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium transition-colors ${
+                    showRunway
+                      ? 'bg-green-50 text-green-800'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                  }`}
+                >
+                  <Hourglass className="h-3.5 w-3.5" aria-hidden />
+                  Runway
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${showRunway ? 'rotate-180' : ''}`}
+                    aria-hidden
+                  />
+                </button>
+              )}
             </div>
-          ) : (
-            <p className="mt-2 text-xs text-slate-400">
-              {cashflowNegative ? 'Out of pocket' : 'Surplus'}
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span
+                className={`text-2xl font-black ${cashflowNegative ? 'text-red-600' : 'text-green-700'}`}
+              >
+                {snap.monthly_cashflow >= 0 ? '+' : '-'}
+                {fmt(snap.monthly_cashflow)}
+              </span>
+              <span className="text-xs text-slate-400">gross</span>
+            </div>
+            {afterTaxCashflow ? (
+              <div className="mt-2 flex items-baseline gap-2">
+                <span
+                  className={`text-lg font-black ${
+                    afterTaxCashflow.after_tax_monthly_cashflow >= 0
+                      ? 'text-green-700'
+                      : 'text-red-600'
+                  }`}
+                >
+                  {afterTaxCashflow.after_tax_monthly_cashflow >= 0 ? '+' : '-'}
+                  {fmt(afterTaxCashflow.after_tax_monthly_cashflow)}
+                </span>
+                <span className="text-xs text-slate-400">
+                  after tax, at {(afterTaxCashflow.tax_bracket * 100).toFixed(0)}%
+                </span>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">
+                {cashflowNegative ? 'Out of pocket' : 'Surplus'}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Gross yield
             </p>
-          )}
+            <p
+              className={`mt-1.5 text-2xl font-black ${yieldGood ? 'text-green-700' : 'text-slate-900'}`}
+            >
+              {pct(snap.yield)}
+            </p>
+            {yieldPct !== null ? (
+              <>
+                <div className="relative mt-3 h-2 rounded-full bg-slate-100">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-seq-3)]"
+                    style={{ width: `${Math.min(100, (yieldPct / yieldMax) * 100)}%` }}
+                  />
+                  <div
+                    className="absolute -top-1 -bottom-1 w-0.5 bg-slate-400"
+                    style={{ left: `${((YIELD_TARGET * 100) / yieldMax) * 100}%` }}
+                    aria-hidden
+                  />
+                </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  {yieldGood
+                    ? `${(yieldPct - YIELD_TARGET * 100).toFixed(1)} points above the 4% target`
+                    : `${(YIELD_TARGET * 100 - yieldPct).toFixed(1)} points below the 4% target`}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">Needs rent and value on record.</p>
+            )}
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Gross yield
-          </p>
-          <p
-            className={`mt-1.5 text-2xl font-black ${yieldGood ? 'text-green-700' : 'text-slate-900'}`}
-          >
-            {pct(snap.yield)}
-          </p>
-          {yieldPct !== null ? (
-            <>
-              <div className="relative mt-3 h-2 rounded-full bg-slate-100">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-seq-3)]"
-                  style={{ width: `${Math.min(100, (yieldPct / yieldMax) * 100)}%` }}
-                />
-                <div
-                  className="absolute -top-1 -bottom-1 w-0.5 bg-slate-400"
-                  style={{ left: `${((YIELD_TARGET * 100) / yieldMax) * 100}%` }}
-                  aria-hidden
-                />
-              </div>
-              <p className="mt-2 text-xs text-slate-400">
-                {yieldGood
-                  ? `${(yieldPct - YIELD_TARGET * 100).toFixed(1)} points above the 4% target`
-                  : `${(YIELD_TARGET * 100 - yieldPct).toFixed(1)} points below the 4% target`}
-              </p>
-            </>
-          ) : (
-            <p className="mt-2 text-xs text-slate-400">Needs rent and value on record.</p>
-          )}
-        </div>
+        {/* Kept mounted while collapsed so the cash amount the user typed survives
+            closing and reopening the panel. */}
+        {canShowRunway && (
+          <div id="runway-panel" hidden={!showRunway}>
+            <YourPositionCard portfolioSnapshot={snap} properties={properties} />
+          </div>
+        )}
       </div>
 
       {/* Section 2 — Decision intelligence: brief, next best action, alternatives */}
