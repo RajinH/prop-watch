@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
@@ -30,6 +30,19 @@ const NAV_LINKS = [
   { label: "Risk", href: "/risk", icon: ShieldAlert },
   { label: "Plan", href: "/plan", icon: CalendarCheck },
 ];
+
+/* Pulses the clicked link's icon until its page starts rendering. Only fires
+   when the route wasn't prefetched; otherwise the loading.tsx skeleton shows
+   instantly and this stays idle. Must render inside the <Link>. */
+function NavIcon({ icon: Icon, className }: { icon: React.ElementType; className: string }) {
+  const { pending } = useLinkStatus();
+  return (
+    <Icon
+      size={18}
+      className={`${className} ${pending ? "animate-pulse motion-reduce:animate-none" : ""}`}
+    />
+  );
+}
 
 /* Chrome-only preference, so it lives here rather than in the Track-A
    storage module (which is reserved for onboarding/portfolio drafts). It is
@@ -194,8 +207,8 @@ export default function Sidebar({ displayName, avatarUrl }: Props) {
                   : "text-slate-600 hover:bg-white hover:text-green-900"
               }`}
             >
-              <Icon
-                size={18}
+              <NavIcon
+                icon={Icon}
                 className={`shrink-0 ${isActive ? "text-green-700" : "text-slate-400 group-hover:text-slate-600"}`}
               />
               {!collapsed && <span className="truncate">{label}</span>}
