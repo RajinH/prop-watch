@@ -59,7 +59,7 @@ export default function Navbar({ displayName, avatarUrl }: Props) {
     <nav className="bg-green-950 px-6 h-14 flex items-center gap-8 shrink-0">
       <Link
         href="/dashboard"
-        className="text-white font-black text-lg tracking-tight shrink-0"
+        className="font-display text-white font-black text-lg tracking-tight shrink-0"
       >
         PropWatch.
       </Link>

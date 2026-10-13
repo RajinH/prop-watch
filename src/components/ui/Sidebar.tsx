@@ -15,6 +15,7 @@ import {
   ChevronUp,
   PanelLeftClose,
   PanelLeftOpen,
+  type LucideIcon,
 } from "lucide-react";
 
 interface Props {
@@ -34,7 +35,7 @@ const NAV_LINKS = [
 /* Pulses the clicked link's icon until its page starts rendering. Only fires
    when the route wasn't prefetched; otherwise the loading.tsx skeleton shows
    instantly and this stays idle. Must render inside the <Link>. */
-function NavIcon({ icon: Icon, className }: { icon: React.ElementType; className: string }) {
+function NavIcon({ icon: Icon, className }: { icon: LucideIcon; className: string }) {
   const { pending } = useLinkStatus();
   return (
     <Icon
@@ -162,7 +163,7 @@ export default function Sidebar({ displayName, avatarUrl }: Props) {
         {!collapsed && (
           <Link
             href="/dashboard"
-            className="text-green-900 font-black text-lg tracking-tight"
+            className="font-display text-green-900 font-black text-lg tracking-tight"
           >
             PropWatch.
           </Link>

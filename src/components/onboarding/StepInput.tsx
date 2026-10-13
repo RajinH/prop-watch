@@ -38,7 +38,7 @@ export default function StepInput({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 bg-transparent text-slate-900 placeholder:text-slate-300 text-base outline-none disabled:opacity-40"
+          className="flex-1 bg-transparent text-slate-900 placeholder:text-slate-400 text-base outline-none disabled:opacity-40"
         />
       </div>
       {hint && <p className="text-xs text-slate-400">{hint}</p>}

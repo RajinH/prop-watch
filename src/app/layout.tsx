@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Red_Hat_Display } from "next/font/google";
+import { Figtree } from "next/font/google";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { THEME_INIT_SCRIPT } from "@/components/ui/ThemeToggle";
 import "./globals.css";
 
-const redHatDisplay = Red_Hat_Display({
-  variable: "--font-red-hat-display",
+// A variable font, so every weight is available without listing them.
+// globals.css maps it to the role tokens `--font-sans` and `--font-display`;
+// swapping a typeface means changing it here and nowhere else.
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
@@ -47,7 +49,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${redHatDisplay.variable} h-full antialiased`}
+      className={`${figtree.variable} h-full antialiased`}
       // The init script sets data-theme before React hydrates, so the server
       // markup (which has no theme) will not match. That mismatch is the point.
       suppressHydrationWarning
@@ -55,12 +57,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body
-        className="min-h-full"
-        style={{
-          fontFamily: "var(--font-red-hat-display), system-ui, sans-serif",
-        }}
-      >
+      <body className="min-h-full font-sans">
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

@@ -51,7 +51,7 @@ export default function RedeemCodeForm() {
           spellCheck={false}
           aria-label="Access code"
           aria-invalid={error ? true : undefined}
-          className="flex-1 rounded-xl border border-slate-200 px-4 py-2 font-mono text-sm tracking-wider text-slate-900 uppercase placeholder:text-slate-300 focus:border-green-700 focus:outline-none"
+          className="flex-1 rounded-xl border border-slate-200 px-4 py-2 font-mono text-sm tracking-wider text-slate-900 uppercase placeholder:text-slate-400 focus:border-green-700 focus:outline-none"
         />
         <button
           type="submit"
