@@ -30,3 +30,19 @@ export function formatLVR(lvr: number): string {
 export function formatDollars(value: number, maxDecimals = 0): string {
   return `$${Math.abs(value).toLocaleString('en-AU', { maximumFractionDigits: maxDecimals })}`
 }
+
+/**
+ * One-line property address, e.g. "2/14 Main Rd, Toukley NSW 2263". Empty
+ * string when no address is on record.
+ */
+export function formatAddress(p: {
+  unit?: string | null
+  street?: string | null
+  city?: string | null
+  state?: string | null
+  postcode?: string | null
+}): string {
+  const street = [p.unit?.trim(), p.street?.trim()].filter(Boolean).join('/')
+  const locality = [p.city?.trim(), p.state?.trim(), p.postcode?.trim()].filter(Boolean).join(' ')
+  return [street, locality].filter(Boolean).join(', ')
+}

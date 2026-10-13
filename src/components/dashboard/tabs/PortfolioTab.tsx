@@ -13,6 +13,7 @@ import { buildDecisionSurface } from '@/lib/propwatch/engine/decisionSurface'
 import type { InvestorGoal, RunChanges } from '@/lib/propwatch/decision/types'
 import DecisionSurface from '@/components/dashboard/DecisionSurface'
 import PortfolioBreakdown from '@/components/dashboard/PortfolioBreakdown'
+import PortfolioIsland from '@/components/dashboard/PortfolioIsland'
 import YourPositionCard from '@/components/dashboard/YourPositionCard'
 import NextBestActionCard from '@/components/decision/NextBestActionCard'
 import AlternativeActionRow from '@/components/decision/AlternativeActionRow'
@@ -105,169 +106,189 @@ export default function PortfolioTab({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Section 1a — Position. Value, debt, equity and LVR are one balance
-          sheet (equity = value - debt, LVR = debt / value); as four separate
-          tiles the reader had to reassemble that arithmetic. Drawn as a single
-          split bar the relationship is the picture, and the view gets the one
-          hero figure it was missing. */}
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Estimated value
-        </p>
-        <p className="mt-1 text-5xl font-black leading-none text-slate-900">
-          {fmt(snap.total_value)}
-        </p>
-
-        {snap.total_value > 0 ? (
-          <>
-            {/* A 2px surface gap separates the segments — never a stroke. */}
-            <div className="mt-5 flex h-7 overflow-hidden rounded-lg bg-slate-100">
-              <div
-                className="h-full bg-[var(--color-series-2)]"
-                style={{ width: `${debtShare * 100}%` }}
-              />
-              {hasSplit && <div className="h-full w-0.5 shrink-0 bg-white" />}
-              <div className="h-full flex-1 bg-[var(--color-series-1)]" />
-            </div>
-
-            <div className="mt-2 flex items-baseline justify-between gap-4 text-sm">
-              <span className="flex items-center gap-2 text-slate-500">
-                {/* The swatch is a key to a segment — don't show one for a
-                    segment the bar isn't drawing. */}
-                {debtShare > 0 && (
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--color-series-2)]" />
-                )}
-                Debt
-                <span className="font-semibold tabular-nums text-slate-700">
-                  {fmt(snap.total_debt)}
-                </span>
-              </span>
-              <span className="flex items-center gap-2 text-slate-500">
-                Equity
-                <span
-                  className={`font-semibold tabular-nums ${underwater ? 'text-red-600' : 'text-slate-700'}`}
-                >
-                  {underwater ? '-' : ''}
-                  {fmt(snap.total_equity)}
-                </span>
-                {equityShare > 0 && (
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--color-series-1)]" />
-                )}
-              </span>
-            </div>
-
-            <p
-              className={`mt-3 text-xs ${
-                underwater || (lvr !== null && lvr >= 0.8)
-                  ? 'text-red-600'
-                  : lvr !== null && lvr >= 0.65
-                    ? 'text-amber-600'
-                    : 'text-slate-400'
-              }`}
-            >
-              {underwater ? 'Debt exceeds estimated value.' : lvrCaption}
-            </p>
-          </>
-        ) : (
-          <p className="mt-3 text-xs text-slate-400">
-            Add a property value to see how your debt and equity split.
-          </p>
-        )}
-      </section>
-
-      {/* Section 1b — Performance. The two numbers that are not part of the
-          balance sheet, each shown against the benchmark it is judged by. */}
+      {/* Section 1 — Position and performance, beside the Portfolio Island.
+          The island (a picture of what you own) takes the left; the figures
+          stack on the right: the balance sheet (value, debt, equity, LVR) as
+          one split bar, then the two numbers that are not part of it, each
+          against the benchmark it is judged by. On small screens the figures
+          come first. */}
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          {properties.length > 0 && (
+            <section className="flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              <div className="flex flex-1 flex-col justify-center">
+                <PortfolioIsland properties={properties} propertySnapshots={propertySnapshots} />
+              </div>
+            </section>
+          )}
+
+          <div
+            className={`order-first flex flex-col gap-3 lg:order-none ${
+              properties.length > 0 ? '' : 'lg:col-span-2'
+            }`}
+          >
+            <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Monthly cashflow
+                Estimated value
               </p>
-              {canShowRunway && (
-                <button
-                  type="button"
-                  onClick={() => setShowRunway((v) => !v)}
-                  aria-expanded={showRunway}
-                  aria-controls="runway-panel"
-                  className={`-mr-1.5 -mt-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium transition-colors ${
-                    showRunway
-                      ? 'bg-green-50 text-green-800'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                  }`}
+              <p className="mt-1 text-4xl font-black leading-none tabular-nums text-slate-900 xl:text-5xl">
+                {fmt(snap.total_value)}
+              </p>
+
+              {snap.total_value > 0 ? (
+                <>
+                  {/* A 2px surface gap separates the segments — never a stroke. */}
+                  <div className="mt-5 flex h-7 overflow-hidden rounded-lg bg-slate-100">
+                    <div
+                      className="h-full bg-[var(--color-series-2)]"
+                      style={{ width: `${debtShare * 100}%` }}
+                    />
+                    {hasSplit && <div className="h-full w-0.5 shrink-0 bg-white" />}
+                    <div className="h-full flex-1 bg-[var(--color-series-1)]" />
+                  </div>
+
+                  {/* Two columns, each label over its figure, so the pair fits
+                      however narrow the card gets — debt under the debt end of
+                      the bar, equity under the equity end. */}
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 text-sm">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-slate-500">
+                        {/* The swatch is a key to a segment — don't show one for a
+                            segment the bar isn't drawing. */}
+                        {debtShare > 0 && (
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--color-series-2)]" />
+                        )}
+                        Debt
+                      </p>
+                      <p className="truncate font-semibold tabular-nums text-slate-700">
+                        {fmt(snap.total_debt)}
+                      </p>
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <p className="flex items-center justify-end gap-2 text-slate-500">
+                        Equity
+                        {equityShare > 0 && (
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--color-series-1)]" />
+                        )}
+                      </p>
+                      <p
+                        className={`truncate font-semibold tabular-nums ${underwater ? 'text-red-600' : 'text-slate-700'}`}
+                      >
+                        {underwater ? '-' : ''}
+                        {fmt(snap.total_equity)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p
+                    className={`mt-3 text-xs ${
+                      underwater || (lvr !== null && lvr >= 0.8)
+                        ? 'text-red-600'
+                        : lvr !== null && lvr >= 0.65
+                          ? 'text-amber-600'
+                          : 'text-slate-400'
+                    }`}
+                  >
+                    {underwater ? 'Debt exceeds estimated value.' : lvrCaption}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-3 text-xs text-slate-400">
+                  Add a property value to see how your debt and equity split.
+                </p>
+              )}
+            </section>
+
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Monthly cashflow
+                </p>
+                {canShowRunway && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRunway((v) => !v)}
+                    aria-expanded={showRunway}
+                    aria-controls="runway-panel"
+                    className={`-mr-1.5 -mt-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium transition-colors ${
+                      showRunway
+                        ? 'bg-green-50 text-green-800'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                    }`}
+                  >
+                    <Hourglass className="h-3.5 w-3.5" aria-hidden />
+                    Runway
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${showRunway ? 'rotate-180' : ''}`}
+                      aria-hidden
+                    />
+                  </button>
+                )}
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-2">
+                <span
+                  className={`text-2xl font-black ${cashflowNegative ? 'text-red-600' : 'text-green-700'}`}
                 >
-                  <Hourglass className="h-3.5 w-3.5" aria-hidden />
-                  Runway
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${showRunway ? 'rotate-180' : ''}`}
-                    aria-hidden
-                  />
-                </button>
+                  {snap.monthly_cashflow >= 0 ? '+' : '-'}
+                  {fmt(snap.monthly_cashflow)}
+                </span>
+                <span className="text-xs text-slate-400">gross</span>
+              </div>
+              {afterTaxCashflow ? (
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span
+                    className={`text-lg font-black ${
+                      afterTaxCashflow.after_tax_monthly_cashflow >= 0
+                        ? 'text-green-700'
+                        : 'text-red-600'
+                    }`}
+                  >
+                    {afterTaxCashflow.after_tax_monthly_cashflow >= 0 ? '+' : '-'}
+                    {fmt(afterTaxCashflow.after_tax_monthly_cashflow)}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    after tax, at {(afterTaxCashflow.tax_bracket * 100).toFixed(0)}%
+                  </span>
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-slate-400">
+                  {cashflowNegative ? 'Out of pocket' : 'Surplus'}
+                </p>
               )}
             </div>
-            <div className="mt-1.5 flex items-baseline gap-2">
-              <span
-                className={`text-2xl font-black ${cashflowNegative ? 'text-red-600' : 'text-green-700'}`}
-              >
-                {snap.monthly_cashflow >= 0 ? '+' : '-'}
-                {fmt(snap.monthly_cashflow)}
-              </span>
-              <span className="text-xs text-slate-400">gross</span>
-            </div>
-            {afterTaxCashflow ? (
-              <div className="mt-2 flex items-baseline gap-2">
-                <span
-                  className={`text-lg font-black ${
-                    afterTaxCashflow.after_tax_monthly_cashflow >= 0
-                      ? 'text-green-700'
-                      : 'text-red-600'
-                  }`}
-                >
-                  {afterTaxCashflow.after_tax_monthly_cashflow >= 0 ? '+' : '-'}
-                  {fmt(afterTaxCashflow.after_tax_monthly_cashflow)}
-                </span>
-                <span className="text-xs text-slate-400">
-                  after tax, at {(afterTaxCashflow.tax_bracket * 100).toFixed(0)}%
-                </span>
-              </div>
-            ) : (
-              <p className="mt-2 text-xs text-slate-400">
-                {cashflowNegative ? 'Out of pocket' : 'Surplus'}
-              </p>
-            )}
-          </div>
 
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Gross yield
-            </p>
-            <p
-              className={`mt-1.5 text-2xl font-black ${yieldGood ? 'text-green-700' : 'text-slate-900'}`}
-            >
-              {pct(snap.yield)}
-            </p>
-            {yieldPct !== null ? (
-              <>
-                <div className="relative mt-3 h-2 rounded-full bg-slate-100">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-seq-3)]"
-                    style={{ width: `${Math.min(100, (yieldPct / yieldMax) * 100)}%` }}
-                  />
-                  <div
-                    className="absolute -top-1 -bottom-1 w-0.5 bg-slate-400"
-                    style={{ left: `${((YIELD_TARGET * 100) / yieldMax) * 100}%` }}
-                    aria-hidden
-                  />
-                </div>
-                <p className="mt-2 text-xs text-slate-400">
-                  {yieldGood
-                    ? `${(yieldPct - YIELD_TARGET * 100).toFixed(1)} points above the 4% target`
-                    : `${(YIELD_TARGET * 100 - yieldPct).toFixed(1)} points below the 4% target`}
-                </p>
-              </>
-            ) : (
-              <p className="mt-2 text-xs text-slate-400">Needs rent and value on record.</p>
-            )}
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Gross yield
+              </p>
+              <p
+                className={`mt-1.5 text-2xl font-black ${yieldGood ? 'text-green-700' : 'text-slate-900'}`}
+              >
+                {pct(snap.yield)}
+              </p>
+              {yieldPct !== null ? (
+                <>
+                  <div className="relative mt-3 h-2 rounded-full bg-slate-100">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-seq-3)]"
+                      style={{ width: `${Math.min(100, (yieldPct / yieldMax) * 100)}%` }}
+                    />
+                    <div
+                      className="absolute -top-1 -bottom-1 w-0.5 bg-slate-400"
+                      style={{ left: `${((YIELD_TARGET * 100) / yieldMax) * 100}%` }}
+                      aria-hidden
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">
+                    {yieldGood
+                      ? `${(yieldPct - YIELD_TARGET * 100).toFixed(1)} points above the 4% target`
+                      : `${(YIELD_TARGET * 100 - yieldPct).toFixed(1)} points below the 4% target`}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-xs text-slate-400">Needs rent and value on record.</p>
+              )}
+            </div>
           </div>
         </div>
 

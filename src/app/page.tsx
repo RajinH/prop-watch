@@ -10,7 +10,7 @@ export default function HomePage() {
     <main className="min-h-screen flex flex-col items-center justify-center px-5 py-16">
       <div className="w-full max-w-lg flex flex-col gap-8">
         <div className="flex flex-col gap-3">
-          <h1 className="text-5xl font-black text-[#005412] tracking-tight">PropWatch</h1>
+          <h1 className="text-5xl font-black text-[var(--brand-wordmark)] tracking-tight">PropWatch</h1>
           <p className="text-slate-500 text-lg leading-snug">
             Remove the guesswork from property ownership.<br />
             Understand your cashflow, equity, and risk in minutes.

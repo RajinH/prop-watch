@@ -6,7 +6,12 @@ import { useRouter } from 'next/navigation'
 import { MapPin, WandSparkles } from 'lucide-react'
 import { apiPost, apiPatch, apiGet, ApiError } from '@/lib/propwatch/api/client'
 import { useToast } from '@/components/ui/ToastProvider'
-import { formatCurrencyShort } from '@/lib/formatters'
+import { formatAddress, formatCurrencyShort } from '@/lib/formatters'
+import {
+  PROPERTY_TYPES,
+  PROPERTY_TYPE_LABELS,
+  toPropertyType,
+} from '@/lib/propwatch/propertyType'
 import AddressAutocomplete, { type AddressFields } from './AddressAutocomplete'
 import StaticMap from './StaticMap'
 import { resolveAddressMatch, type HtagAddressCandidate } from '@/lib/propwatch/htag/matchAddress'
@@ -25,6 +30,9 @@ interface PropertyRow {
   city: string | null
   postcode: string | null
   state: string | null
+  property_type?: string | null
+  storeys?: number | null
+  land_area?: number | null
   latitude: number | null
   longitude: number | null
   current_value: number
@@ -64,6 +72,9 @@ interface FormState {
   city: string
   postcode: string
   state: string
+  property_type: string
+  storeys: string
+  land_area: string
   // Resolved by Checkify on address select — never hand-entered, so kept as
   // numbers rather than the string form used by the typed money/date fields.
   latitude: number | null
@@ -133,6 +144,9 @@ export default function PropertyWizard({ mode, property }: Props) {
     city: property?.city ?? '',
     postcode: property?.postcode ?? '',
     state: property?.state ?? '',
+    property_type: toPropertyType(property?.property_type) ?? '',
+    storeys: property?.storeys?.toString() ?? '',
+    land_area: property?.land_area?.toString() ?? '',
     latitude: property?.latitude ?? null,
     longitude: property?.longitude ?? null,
     htag_address_key: property?.htag_address_key ?? '',
@@ -365,6 +379,23 @@ export default function PropertyWizard({ mode, property }: Props) {
       ...(form.city.trim() ? { city: form.city.trim() } : {}),
       ...(form.postcode.trim() ? { postcode: form.postcode.trim() } : {}),
       ...(form.state.trim() ? { state: form.state.trim() } : {}),
+      // Null on edit when deselected, so the owner can clear it.
+      ...(form.property_type
+        ? { property_type: form.property_type }
+        : mode === 'edit'
+          ? { property_type: null }
+          : {}),
+      // Land has no building; a whole number of storeys otherwise.
+      ...(form.property_type !== 'land' && Number.isInteger(Number(form.storeys)) && Number(form.storeys) >= 1
+        ? { storeys: Number(form.storeys) }
+        : mode === 'edit'
+          ? { storeys: null }
+          : {}),
+      ...(Number(form.land_area) > 0
+        ? { land_area: Number(form.land_area) }
+        : mode === 'edit'
+          ? { land_area: null }
+          : {}),
       // On edit, explicitly null cleared coordinates so a retyped address wipes
       // the old point and lets the backfill resolve the new one; on create
       // there is nothing to clear, so just omit them.
@@ -591,6 +622,44 @@ export default function PropertyWizard({ mode, property }: Props) {
                   ✓ Address confirmed{form.htag_address_label && `: ${form.htag_address_label}`}
                 </p>
               )}
+
+              <Field label="Property type">
+                <RadioGroup
+                  value={form.property_type}
+                  onChange={(v) => set('property_type', v)}
+                  options={PROPERTY_TYPES.map((t) => ({ value: t, label: PROPERTY_TYPE_LABELS[t] }))}
+                />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-4">
+                {form.property_type !== 'land' && (
+                  <Field
+                    label={form.property_type === 'unit' ? 'Storeys in the building' : 'Storeys'}
+                  >
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      step={1}
+                      value={form.storeys}
+                      onChange={(e) => set('storeys', e.target.value)}
+                      className={inputClass}
+                      placeholder={form.property_type === 'unit' ? 'e.g. 6' : '1'}
+                    />
+                  </Field>
+                )}
+                <Field label="Land size (m²)">
+                  <input
+                    type="number"
+                    min={1}
+                    step="any"
+                    value={form.land_area}
+                    onChange={(e) => set('land_area', e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. 600"
+                  />
+                </Field>
+              </div>
             </>
           )}
 
@@ -923,17 +992,8 @@ export default function PropertyWizard({ mode, property }: Props) {
               Summary
             </p>
             <SummaryRow label="Name" value={form.name.trim()} />
-            <SummaryRow
-              label="Address"
-              value={[
-                [form.unit.trim(), form.street.trim()].filter(Boolean).join('/'),
-                [form.city.trim(), form.state.trim(), form.postcode.trim()]
-                  .filter(Boolean)
-                  .join(' '),
-              ]
-                .filter(Boolean)
-                .join(', ')}
-            />
+            <SummaryRow label="Address" value={formatAddress(form)} />
+            <SummaryRow label="Type" value={propertyTypeLabel(form.property_type)} />
             <SummaryRow label="Value" value={formatMoneyField(form.current_value)} />
             <SummaryRow
               label="Rent"
@@ -954,6 +1014,11 @@ export default function PropertyWizard({ mode, property }: Props) {
 function formatMoneyField(raw: string): string {
   const n = Number(raw)
   return raw.trim() === '' || !Number.isFinite(n) ? '—' : formatCurrencyShort(n)
+}
+
+function propertyTypeLabel(value: string) {
+  const type = toPropertyType(value)
+  return type ? PROPERTY_TYPE_LABELS[type] : ''
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {

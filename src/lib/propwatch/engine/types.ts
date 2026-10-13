@@ -1,3 +1,5 @@
+import type { PropertyType } from '../propertyType'
+
 export type Property = {
   id: string
   portfolio_id: string
@@ -6,6 +8,16 @@ export type Property = {
   // Optional so engine fixtures aren't forced to carry presentation fields.
   latitude?: number | null
   longitude?: number | null
+  // Display-only, like the coordinates: picks the Portfolio Island model.
+  property_type?: PropertyType | null
+  storeys?: number | null
+  land_area?: number | null // m²
+  // Display-only address parts (one line via formatters.formatAddress).
+  unit?: string | null
+  street?: string | null
+  city?: string | null
+  state?: string | null
+  postcode?: string | null
   current_value: number
   current_debt: number
   monthly_rent: number

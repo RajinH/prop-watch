@@ -5,6 +5,7 @@ import { runDecisionEngine } from '@/lib/propwatch/db/decisionHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithUser } from '@/lib/propwatch/api/getSupabaseWithUser'
 import type { Property } from '@/lib/propwatch/engine/types'
+import { PROPERTY_TYPES } from '@/lib/propwatch/propertyType'
 
 const createPropertySchema = z.object({
   name: z.string().min(1).max(200),
@@ -13,6 +14,9 @@ const createPropertySchema = z.object({
   city: z.string().max(150).optional(),
   postcode: z.string().max(20).optional(),
   state: z.string().max(100).optional(),
+  property_type: z.enum(PROPERTY_TYPES).optional(),
+  storeys: z.number().int().min(1).max(120).optional(),
+  land_area: z.number().positive().max(10_000_000).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   // HTAG join keys, resolved by the wizard's address match

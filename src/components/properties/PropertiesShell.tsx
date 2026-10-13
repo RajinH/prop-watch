@@ -9,7 +9,7 @@ import { apiDelete } from '@/lib/propwatch/api/client'
 import PageHero from '@/components/ui/PageHero'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import PropertyMap from './PropertyMap'
-import { formatCurrencyShort } from '@/lib/formatters'
+import { formatAddress, formatCurrencyShort } from '@/lib/formatters'
 
 interface PropertyRow {
   id: string
@@ -45,15 +45,6 @@ interface PropertyRow {
 interface Props {
   initialProperties: PropertyRow[]
   portfolioId: string | null
-}
-
-/** Single-line address for the card subtitle and the map's accessible label. */
-function formatAddress(p: PropertyRow): string {
-  const street = [p.unit?.trim(), p.street?.trim()].filter(Boolean).join('/')
-  const locality = [p.city?.trim(), p.state?.trim(), p.postcode?.trim()]
-    .filter(Boolean)
-    .join(' ')
-  return [street, locality].filter(Boolean).join(', ')
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

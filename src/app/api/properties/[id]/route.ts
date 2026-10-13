@@ -4,6 +4,7 @@ import { runDecisionEngine } from '@/lib/propwatch/db/decisionHelpers'
 import { ok, err } from '@/lib/propwatch/api/respond'
 import { getSupabaseWithPaidUser } from '@/lib/propwatch/access/getAccess'
 import type { Property } from '@/lib/propwatch/engine/types'
+import { PROPERTY_TYPES } from '@/lib/propwatch/propertyType'
 
 const updatePropertySchema = z
   .object({
@@ -13,6 +14,9 @@ const updatePropertySchema = z
     city: z.string().max(150).nullable().optional(),
     postcode: z.string().max(20).nullable().optional(),
     state: z.string().max(100).nullable().optional(),
+    property_type: z.enum(PROPERTY_TYPES).nullable().optional(),
+    storeys: z.number().int().min(1).max(120).nullable().optional(),
+    land_area: z.number().positive().max(10_000_000).nullable().optional(),
     latitude: z.number().min(-90).max(90).nullable().optional(),
     longitude: z.number().min(-180).max(180).nullable().optional(),
     // HTAG join keys; null clears them when the address changes
